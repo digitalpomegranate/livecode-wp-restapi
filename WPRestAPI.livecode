@@ -1,0 +1,2622 @@
+﻿script "WPRestAPI"
+local sWPAPI
+local sAccessToken
+local sTokenLastUpdateTime
+
+
+-------------------------------------------------------------------------------------------------------------
+-- logIn  
+-- DESCRIPTION:
+--       This function get WPAPI properties and check them if everything is good, returns "true"   
+-- PARAMETERS:
+--       pWPAPI: Array which is contains all properties which we need for rest functionality
+-- CHANGES:
+--       22/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function logIn pWPAPI
+   put pWPAPI into sWPAPI
+   
+   --put empty into sAccessToken
+   
+   put pWPAPI["secret"] into tSecret
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   put "Cache-Control: no-cache" & cr after tHeader
+   
+   -- Setting http headers
+   set the httpheaders to tHeader
+   
+   put accessTokenGet() into sAccessToken
+   
+   if sAccessToken is empty then
+      return false
+   end if
+   
+   if sAccessToken["access_token"] is empty then
+      put accessTokenGet() into sAccessToken
+      -- Try one more time
+      if sAccessToken["access_token"] is empty then
+         return false
+      end if
+   end if
+   
+   return true
+end logIn
+
+
+-------------------------------------------------------------------------------------------------------------
+-- accessTokenGet  
+-- DESCRIPTION:
+--       This function returns access token
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       21/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function accessTokenGet
+   
+   put the seconds into tTokenRequestTime
+   
+   -- If it is empty then we need new access token
+   if sTokenLastUpdateTime is not empty then
+      -- One access token we can use within one hour
+      if (tTokenRequestTime - sTokenLastUpdateTime) > 3000 or sAccessToken is empty then
+         -- Continue script to get access token
+      else
+         if sAccessToken["access_token"] is empty then
+            -- Continue script to get access token
+         else
+            return sAccessToken
+         end if
+      end if 
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   put "Cache-Control: no-cache" & cr after tHeader
+   -- Basic authentication
+   put "Authorization: Basic " after tHeader
+   put base64encode(sWPAPI["clientid"] & ":" & sWPAPI["secret"]) into tH
+   replace cr with "" in tH
+   put tH after tHeader
+   set the httpheaders to tHeader
+   
+   libURLSetSSLVerification false
+   
+   put sWPAPI["username"] into tUserInfo["username"]
+   put sWPAPI["password"] into tUserInfo["password"]
+   put "password" into tUserInfo["grant_type"]
+   
+   -- Convert to Json for posting
+   put jsonFromArray(tUserInfo) into tUserInfoJson
+   
+   -- Build the URL
+   put sWPAPI["endpoint"] into tURL
+   put "/?oauth=token" after tURL
+   
+   -- Post json to builded URL for getting the access token
+   post tUserInfoJson to URL tURL
+   put the result into tok
+   put it into tResponse
+   
+   if tResponse is empty then
+      return empty
+   end if
+   
+   -- added by Chi
+   replace "<!-- Really Simple SSL mixed content fixer active -->" with "" in tResponse
+   
+   -- Put access token get time for further checking
+   put the seconds into sTokenLastUpdateTime
+   
+   -- Convert received json to array and get access token
+   put arrayFromJson(tResponse) into tResultArray
+   
+   return tResultArray
+end accessTokenGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- accessTokenCheck  
+-- DESCRIPTION:
+--       This function check can we use access token or we need new one
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       21/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+command accessTokenCheck
+   
+   -- Request sending time
+   put the seconds into tTokenRequestTime
+   
+   -- If it is empty then we need new access token
+   if sTokenLastUpdateTime is not empty then
+      -- One access token we can use within one hour
+      if (tTokenRequestTime - sTokenLastUpdateTime) > 3000 or sAccessToken is empty then
+         put accessTokenGet() into sAccessToken
+      else
+         if sAccessToken contains "error" or sAccessToken contains "AccessToken" then
+            put accessTokenGet() into sAccessToken
+         end if
+      end if 
+   else
+      put accessTokenGet() into sAccessToken
+   end if
+   
+end accessTokenCheck
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postsGetList  
+-- DESCRIPTION:
+--       This function returns all posts data  
+-- PARAMETERS:
+--       pParameters: Filters for getting list
+-- CHANGES:
+--       30/03/2016 Gohar: Created function
+-------------------------------------------------------------------------------------------------------------
+function postsGetList pParameters
+   -- Maximum number of items to be returned in result set. Default: 10
+   if pParameters["per_page"] is not empty then
+      put "&per_page=" & pParameters["per_page"] after tFilters
+   end if
+   
+   -- Scope under which the request is made; determines fields present in response. View, Embed or Edit
+   if pParameters["context"] is not empty then
+      if pParameters["context"] is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pParameters["context"] after tFilters
+      end if
+      put "&context=" & pParameters["context"] after tFilters
+   end if
+   
+   -- Current page of the collection. Default: 1
+   if pParameters["page"] is not empty then
+      put "&page=" & pParameters["page"] after tFilters
+   end if
+   
+   -- The order of the collection. Can either be asc or desc.
+   if pParameters["order"] is not empty then
+      put "&order=" & pParameters["order"] after tFilters
+   end if
+   
+   -- Sorting attribute of the collection. Possible values can be id, title or slug.
+   if pParameters["orderby"] is not empty then
+      put "&orderby=" & pParameters["orderby"] after tFilters
+   end if
+   
+   -- Limit the results to a post having a specific slug.
+   if pParameters["slug"] is not empty then
+      put "&slug=" & pParameters["slug"] after tFilters
+   end if
+   
+   -- Used to limit the collection of the posts having a particular status.
+   if pParameters["status"] is not empty then
+      put "&status=" & pParameters["status"] after tFilters
+   end if
+   
+   -- The author ID. Used to limit results belonging to a specific author.
+   if pParameters["author"] is not empty then
+      put "&author=" & pParameters["author"] after tFilters
+   end if
+   
+   -- The search query. Limit results to the matching string.
+   if pParameters["search"] is not empty then
+      put "&search=" & pParameters["search"] after tFilters
+   end if
+   
+   put "posts/" before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get all posts list
+   get URL(tPostURL & tAPICall & tFilters)
+   put it into tJsonData
+   
+   -- Converting postes data json to array for usability
+   put arrayFromJson(tJsonData) into tPagesList
+   
+   -- Convert JSON to array
+   return tJsonData
+end postsGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postGetByID  
+-- DESCRIPTION:
+--       This function returns post data by ID
+-- PARAMETERS:
+--       pPostId: Posst ID which data we want to return
+--       pContext: Scope under which the request is made; determines fields present in response.
+-- CHANGES:
+--       30/03/2016 Gohar: Created function
+-------------------------------------------------------------------------------------------------------------
+function postGetByID pPostId, pContext
+   
+   --Check for required parameters
+   if pPostID is empty then
+      return "Error: PostId is required" //postid is required
+   end if
+   
+   -- Build the api call
+   put "posts/" into tAPICall
+   put pPostId after tAPICall
+   
+   -- Checkin context parameter
+   if pContext is "view" or pContext is "embed" then
+      put  "/?context=" & pContext after tAPICall
+   end if   
+   
+   -- For Edit context we need a access token
+   if pContext is "edit" then
+      accessTokenCheck
+      
+      put "/?access_token=" & sAccessToken["access_token"] after tAPICall
+      
+      put  "&context=" & pContext after tAPICall
+   end if   
+   
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall) 
+   
+   put it into tJsonData
+   return tJsonData
+end postGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postCreate  
+-- DESCRIPTION:
+--       This function creates new post  
+-- PARAMETERS:
+--       pPostData: Creating post data
+-- CHANGES:
+--       20/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postCreate pPostData
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPostData["title"] is empty then
+      return "Error: Title is required" //title is required
+   end if
+   
+   if  pPostData["content"] is empty then
+      return "Error: Content Raw is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pPostData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "posts" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for creating the post
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   -- Added by Chi
+   put it into tResponse
+   
+   if tResults is empty then   
+      return false
+   end if
+   
+   return tResponse
+end postCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postDelete  
+-- DESCRIPTION:
+--       This function deletes post by ID  
+-- PARAMETERS:
+--       pPostID: Post ID which we want to delete
+--       pForce: Whether to bypass trash and force deletion.
+--                      by default it is false and post goes to the trash
+--                      if set it to true, the post will not be able to be restored by the user. 
+-- CHANGES:
+--       20/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postDelete pPostID, pForce
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPostID is empty then
+      return "Error: PostID is required" //pPostID is required
+   end if
+   
+   if pForce is true then
+      put  "&force=true" into tForce
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "posts/" into tAPICall
+   put pPostID & "/?access_token=" & tAccessToken & tForce after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   delete URL (tPostURL & tAPICall) 
+   put the result into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end postDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postEdit  
+-- DESCRIPTION:
+--       This function edit post by ID  
+-- PARAMETERS:
+--       pPostID: Post ID which we want to edit
+--       pPostData: Editing post data
+-- CHANGES:
+--       20/03/2016 Gohar: Created function
+-------------------------------------------------------------------------------------------------------------
+function postEdit pPostID, pPostData
+   accessTokenCheck
+   
+   -- Post title is required
+   if pPostData["title"] is empty then
+      return "Error: Title is required" 
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" into tHeader
+   set the httpheaders to tHeader
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pPostData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "posts/" into tAPICall
+   put pPostID & "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for editing the post
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then 
+      return 0
+   end if
+   return tResults
+end postEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postEditWithLang
+-- DESCRIPTION:
+--       This function edit post with languages
+-- PARAMETERS:
+--       pPostID : ID of post which we want to edit
+--       pPostData: Editing post data
+-- CHANGES:
+--       02/05/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postEditWithLang pPostID, pPostData
+   accessTokenCheck
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Get url for posting 
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Create the URL used to call the REST service
+   put "posts/" & pPostID into tAPICall
+   
+   -- We need context for get the all languages list of our post
+   put "/?context=edit" after tAPICall
+   put "&access_token=" & tAccessToken after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall) 
+   put it into tEditingPostJson
+   
+   put arrayFromJson(tEditingPostJson) into tEditingPostArray
+   
+   -- Get languages of post title
+   put tEditingPostArray["title"]["raw"] into tTitleLangList
+   -- Put all title languages into array for changes
+   repeat with tIndex = 1 to the len of tTitleLangList
+      if char tIndex of tTitleLangList is "]" then
+         put char tIndex of tTitleLangList after tChar
+         put char tIndex-2 to tIndex-1 of tTitleLangList  into tTitleLang 
+         put tIndex into tCalc
+      else 
+         put char tIndex of tTitleLangList after tChar
+         
+         if tIndex is not 1 then
+            if char tIndex of tTitleLangList is "[" then
+               put char tCalc+1 to tIndex-1 of tTitleLangList into tTitleValue
+               put tTitleValue into tPostLang["title"][tTitleLang]
+            end if
+         end if
+      end if
+   end repeat
+   
+   -- Add languages which we want to edit or add
+   repeat for each key tKey in pPostData["title"]
+      put pPostData["title"][tKey] into tPostLang["title"][tKey] 
+   end repeat
+   
+   -- Get languages of post content
+   put tEditingPostArray["content"]["raw"] into tContentLangList
+   -- Put all content languages into array for changes
+   repeat with tIndex = 1 to the len of tContentLangList
+      if char tIndex of tContentLangList is "]" then
+         put char tIndex of tContentLangList after tChar
+         put char tIndex-2 to tIndex-1 of tContentLangList  into tContentLang 
+         put tIndex into tCalc
+      else 
+         put char tIndex of tContentLangList after tChar
+         
+         if tIndex is not 1 then
+            if char tIndex of tContentLangList is "[" then
+               put char tCalc+1 to tIndex-1 of tContentLangList into tContentValue
+               put tContentValue into tPostLang["content"][tContentLang]
+            end if
+         end if
+      end if
+   end repeat
+   
+   -- Add languages which we want to edit or add
+   repeat for each key tKey in pPostData["content"]
+      put pPostData["content"][tKey] into tPostLang["content"][tKey] 
+   end repeat
+   
+   
+   -- Build final line for title and content with all needed shortcodes
+   put empty into tTurnToContent
+   repeat for each element tElement in tPostLang
+      if tTurnToContent is not empty then
+         put "[vc_row][vc_column][vc_column_text]" into tContent
+         repeat for each key tKey in tElement
+            put "[:" & tKey & "]" & tElement[tKey] after tContent
+         end repeat
+         put "[/vc_column_text][/vc_column][/vc_row]" after tContent
+      else
+         repeat for each key tKey in tElement
+            put "[:" & tKey & "]" & tElement[tKey] after tTitle
+            put "content" into tTurnToContent
+         end repeat
+      end if
+   end repeat
+   
+   -- Build final array for posting
+   put tTitle into tEditPostArray["title"]
+   put tContent into tEditPostArray["content"]
+   
+   repeat for each key tKey in pPostData
+      if tKey is not "title" and tKey is not "content" then
+         put pPostData[tKey] into tEditPostArray[tKey]
+      end if
+   end repeat
+   
+   -- Convert to json for posting
+   put jsonFromArray(tEditPostArray) into tPostJson 
+   
+   -- Build URL
+   put "posts/" & pPostID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Post json data for editing
+   post tPostJson to URL (tPostURL & tAPICall)
+   put it into tResults 
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end postEditWithLang
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postRevisionsGetList
+-- DESCRIPTION:
+--       This function returns post's revisions list
+-- PARAMETERS:
+--       pPostID: Post ID whcih revisions we want to get
+-- CHANGES:
+--       19/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postRevisionsGetList pPostID
+   accessTokenCheck
+   
+   --Check for required parameters
+   if pPostID is empty then
+      return "Error: PostId is required"
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   put "posts/" & pPostID & "/revisions" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get all posts list
+   get URL(tPostURL & tAPICall)
+   put it into tJsonData
+   
+   -- Converting postes data json to array for usability
+   put arrayFromJson(tJsonData) into tPagesList
+   
+   -- Convert JSON to array
+   return tPagesList
+end postRevisionsGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postRevisionGetByID
+-- DESCRIPTION:
+--       This function returns post's revision by ID
+-- PARAMETERS:
+--       pPostID: Post ID whcih revisions we want to get
+--       pRevisionID: Revision id which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postRevisionGetByID pPostID, pRevisionID
+   accessTokenCheck
+   
+   --Check for required parameters
+   if pPostID is empty then
+      return "Error: PostID is required"
+   end if
+   
+   if pRevisionID is empty then
+      return "Error: RevisionID is required"
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   put "posts/" & pPostID & "/revisions/" & pRevisionID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get all posts list
+   get URL(tPostURL & tAPICall)
+   put it into tJsonData
+   
+   return tJsonData
+end postRevisionGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postRevisionDelete
+-- DESCRIPTION:
+--       This function deletes post's revision
+-- PARAMETERS:
+--       pPostID: Post ID whcih revisions we want to delete
+--       pRevisionID: Revision id which we want to delete
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postRevisionDelete pPostID, pRevisionID
+   accessTokenCheck
+   
+   --Check for required parameters
+   if pPostID is empty then
+      return "Error: PostID is required"
+   end if
+   
+   if pRevisionID is empty then
+      return "Error: RevisionID is required"
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   put "posts/" & pPostID & "/revisions/" & pRevisionID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get all posts list
+   delete URL(tPostURL & tAPICall)
+   put the result into tResult
+   
+   return tResult
+end postRevisionDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postMetaCreate  
+-- DESCRIPTION:
+--       This function creates new meta for post  
+-- PARAMETERS:
+--       pPostID: Post id for whose we want to create meta
+--       pMetaData: Creating meta's data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postMetaCreate pPostID, pMetaData
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPostID is empty then
+      return "Post ID is required"
+   end if
+   
+   if pMetaData["key"] is empty then
+      return "Error: Key is required"
+   end if
+   
+   if pMetaData["value"] is empty then
+      return "Error:  Value is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pMetaData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "posts/" & pPostID & "/meta" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for creating the post
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResponse
+   
+   if tResponse is empty then   
+      return false
+   end if
+   
+   return tResponse
+end postMetaCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postMetaGetByID  
+-- DESCRIPTION:
+--       This function get meta for post by id  
+-- PARAMETERS:
+--       pPostID: Post id for which meta(s) we want to get
+--       pMetaID: Meta id which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postMetaGetByID pPostID, pMetaID
+   accessTokenCheck
+   
+   --Check for required parameters
+   if pPostID is empty then
+      return "Error: PostId is required"
+   end if
+   
+   -- Bulild api call
+   put "posts/" & pPostID & "/meta/" into tAPICall
+   
+   -- If we don't have meta id then we get all metas of chosen post 
+   -- in other case we get specific meta
+   if pMetaID is not empty then
+      put pMetaID & "/" after tAPICall
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   put "?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL (tPostURL & tAPICall)
+   put it into tMetaJson
+end postMetaGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postMetaGetByID  
+-- DESCRIPTION:
+--       This function edit meta for post  
+-- PARAMETERS:
+--       pPostID: Post id for which meta we want to edit
+--       pMetaID: Meta id which we want to edit
+--       pMetaData: Editing meta's data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postMetaEdit pPostID, pMetaID, pMetaData
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pMetaData["key"] is empty then
+      return "Error: Key is required"
+   end if
+   
+   if pMetaData["value"] is empty then
+      return "Error:  Value is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Bulild api call
+   put "posts/" & pPostID & "/meta/" & pMetaID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   put jsonFromArray(pMetaData) into tPostJson
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   put it into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end postMetaEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postMetaDelete  
+-- DESCRIPTION:
+--       This function creates new meta for post  
+-- PARAMETERS:
+--       pPostID: Post id for which meta we want to edit
+--       pMetaID: Meta id which we want to edit
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postMetaDelete pPostID, pMetaID
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPostID is empty then
+      return "Error: PostID is required"
+   end if
+   
+   if pMetaID is empty then
+      return "Error: MetaID is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Bulild api call
+   put "posts/" & pPostID & "/meta/" & pMetaID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL  
+   
+   -- Deleting meta
+   delete URL (tPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end postMetaDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- taxonomiesGetList  
+-- DESCRIPTION:
+--       This function returns all taxonomies data  
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxonomiesGetList
+   -- Create the URL used to call the REST service
+   put "taxonomies" into tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get all taxonomies list
+   get URL(tPostURL & tAPICall)
+   put it into tJsonData
+   
+   put arrayFromJson(tJsonData) into tTaxonomiesList
+   
+   return tTaxonomiesList
+end taxonomiesGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- taxonomyGetByID  
+-- DESCRIPTION:
+--       This function returns taxonomy data by ID  
+-- PARAMETERS:
+--       pTaxonomyID: Taxonomy which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxonomyGetByID pTaxonomyID
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Create the URL used to call the REST service
+   put "taxonomies/" into tAPICall
+   put pTaxonomyID after tAPICall
+   
+   -- Get all taxonomies list
+   get URL(tPostURL & tAPICall)
+   put it into tTaxJsonData
+   
+   return tTaxJsonData
+end taxonomyGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- userCreate  
+-- DESCRIPTION:
+--       This function creates new user  
+-- PARAMETERS:
+--       pUserData: Creating user data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function userCreate pUserData
+   accessTokenCheck
+   
+   --Check for required parameters
+   if pUserData["username"] is empty then
+      return "Error: Username is required" 
+   end if
+   
+   if pUserData["email"] is empty then
+      return "Error: Email is required" 
+   end if
+   
+   if pUserData["password"] is empty then
+      return "Error: Password is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pUserData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "users" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for creating the post
+   post tPostJson to URL(tPostURL & tAPICall)
+   put it into tResults
+   
+   if tResults is empty then   
+      return false
+   end if
+   
+   return tResults
+end userCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- userEdit  
+-- DESCRIPTION:
+--       This function edit user  
+-- PARAMETERS:
+--       pUserID: User id which we want to edit
+--       pUserData: Editing user data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function userEdit pUserID pUserData
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pUserData is empty then
+      return "Error: data is required" //username is required
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pUserData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "users/" & pUserID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for editing the post
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then 
+      return 0
+   end if
+   
+   return tResults
+end userEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- userDelete  
+-- DESCRIPTION:
+--       This function delete user  
+-- PARAMETERS:
+--       pUserID: User id which we want to delete
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function userDelete pUserID
+   accessTokenCheck
+   
+   -- User id is required for deleting
+   if pUserID is empty then 
+      return "Error: User id is required"
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "users/" & pUserID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   delete URL (tPostURL & tAPICall) 
+   put the result into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end userDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- usersGetList  
+-- DESCRIPTION:
+--       This function get all users list 
+-- PARAMETERS:
+--       pUsersFilter: Filters for search
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function usersGetList pUsersFilter
+   accessTokenCheck
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "users/" into tAPICall
+   put "?access_token=" & tAccessToken after tAPICall
+   
+   -- Checking filters
+   if pUsersFilter["number"] is not empty then
+      put "&number=" & pUsersFilter["number"] after tAPICall
+   end if
+   
+   if pUsersFilter["offset"] is not empty then
+      put "&offset=" & pUsersFilter["offset"] after tAPICall
+   end if
+   
+   if pUsersFilter["orderby"] is not empty then
+      put "&orderby=" & pUsersFilter["orderby"] after tAPICall
+   end if
+   
+   if pUsersFilter["order"] is not empty then
+      put "&order=" & pUsersFilter["order"] after tAPICall
+   end if
+   
+   if pUsersFilter["s"] is not empty then
+      put "&s=" & pUsersFilter["s"] after tAPICall
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tUsersListJson
+   
+   return arrayFromJson(tUsersListJson)
+end usersGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- userGetByID  
+-- DESCRIPTION:
+--       This function get user by ID 
+-- PARAMETERS:
+--       pUserID: User id which we want to get
+--       pContext: This parameter controls the format of the data to return
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function userGetByID pUserID, pContext
+   accessTokenCheck
+   
+   -- Id is required
+   if pUserID is empty then
+      return "Error: User Id is required"
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   --Build the api call
+   put "users/" & pUserID into tAPICall
+   put "?access_token=" & tAccessToken after tAPICall
+   
+   put "view, edit, embed" into tContextValues
+   if tContextValues contains pContext  then
+      put "?context=" & pContext after tAPICall
+   end if
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall) into tUserJson
+   
+   return tUserJson
+end userGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- commentCreate  
+-- DESCRIPTION:
+--       This function creates new comment  
+-- PARAMETERS:
+--       pCommentData: Creating comment data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function commentCreate pCommentData
+   accessTokenCheck
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pCommentData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "comments" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+   
+end commentCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- commentsGetList  
+-- DESCRIPTION:
+--       This function get all comments list
+-- PARAMETERS:
+--       pParameters: Array with Getting list filters
+-- CHANGES:
+--       04/08/2015 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function commentsGetList pParameters
+   -- Maximum number of items to be returned in result set. Default: 10
+   if pParameters["per_page"] is not empty then
+      put "&per_page=" & pParameters["per_page"] after tFilters
+   end if
+   
+   -- Scope under which the request is made; determines fields present in response. View, Embed or Edit
+   if pParameters["context"] is not empty then
+      if pParameters["context"] is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pParameters["context"] after tFilters
+      end if
+      put "&context=" & pParameters["context"] after tFilters
+   end if
+   
+   -- Current page of the collection. Default: 1
+   if pParameters["page"] is not empty then
+      put "&page=" & pParameters["page"] after tFilters
+   end if
+   
+   -- The order of the collection. Can either be asc or desc.
+   if pParameters["order"] is not empty then
+      put "&order=" & pParameters["order"] after tFilters
+   end if
+   
+   -- Sorting attribute of the collection. Possible values can be id, title or slug.
+   if pParameters["orderby"] is not empty then
+      put "&orderby=" & pParameters["orderby"] after tFilters
+   end if
+   
+   -- Limit the results to a post having a specific slug.
+   if pParameters["slug"] is not empty then
+      put "&slug=" & pParameters["slug"] after tFilters
+   end if
+   
+   -- Used to limit the collection of the posts having a particular status.
+   if pParameters["status"] is not empty then
+      put "&status=" & pParameters["status"] after tFilters
+   end if
+   
+   -- The author ID. Used to limit results belonging to a specific author.
+   if pParameters["author"] is not empty then
+      put "&author=" & pParameters["author"] after tFilters
+   end if
+   
+   -- The search query. Limit results to the matching string.
+   if pParameters["search"] is not empty then
+      put "&search=" & pParameters["search"] after tFilters
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "comments/" before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall & tFilters)
+   put it into tJson
+   
+   return tJson
+end commentsGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- commentGetByID  
+-- DESCRIPTION:
+--       This function get comment by ID  
+-- PARAMETERS:
+--       pCommentID: Commend ID which we want to get
+-- CHANGES:
+--       21/08/2015 Hamlet: Created function
+-------------------------------------------------------------------------------------------------------------
+function commentGetByID pCommentID
+   --Check for required parameters
+   if pCommentID is empty then
+      return "Error: Comment ID is required" //pCommentId is required
+   end if
+   
+   -- Build the api call
+   put "comments/" into tAPICall
+   put pCommentID after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get comment
+   get URL(tPostURL & tAPICall) 
+   put it into tCommentJson
+   
+   return tCommentJson
+end commentGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- commentDelete  
+-- DESCRIPTION:
+--       This function deletes comment by ID  
+-- PARAMETERS:
+--       pCommentID: Post ID which we want to delete
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function commentDelete pCommentID
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pCommentID is empty then
+      return "Error: CommentID is required" 
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "comments/" into tAPICall
+   put pCommentID & "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Deleting page
+   delete URL (tPostURL & tAPICall) 
+   put the result into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end commentDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- commentEdit  
+-- DESCRIPTION:
+--       This function edit comment  
+-- PARAMETERS:
+--       p CategoryID: Editing comment id
+--       pCategoryData: Editing comment data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function commentEdit pCommentID, pCommentData
+   accessTokenChech
+   
+   --Checking and Buidling Parameters
+   if pCommentID is empty then
+      return "Error: ID is required" //ID is required
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" into tHeader
+   set the httpheaders to tHeader
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pCommentData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "commetns/" into tAPICall
+   put pCommentID & "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for editing the page
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then 
+      return 0
+   end if
+   return tResults
+end commentEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- pageDelete 
+-- DESCRIPTION:
+--       This function delete page
+-- PARAMETERS:
+--       pPageID: Page ID which we want to delete
+--       pForce: Whether to bypass trash and force deletion.
+--                      by default it is false and post goes to the trash
+--                      if set it to true, the post will not be able to be restored by the user. 
+-- CHANGES:
+--       25/4/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function pageDelete pPageID, pForce
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPageID is empty then
+      return "Error: PageID is required" //pPostID is required
+   end if
+   if pForce is true then
+      put  "?force=true" into tForce
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "pages/" into tAPICall
+   put pPageID & "/?access_token=" & tAccessToken & tForce after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Deleting page
+   delete URL (tPostURL & tAPICall) 
+   put the result into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end pageDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- pageCreate  
+-- DESCRIPTION:
+--       This function creates new page  
+-- PARAMETERS:
+--       pPageData: Creating page data
+-- CHANGES:
+--       30/03/2016 Gohar: Created function
+-------------------------------------------------------------------------------------------------------------
+function pageCreate pPageData
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPageData["title"] is empty then
+      return "Error: Title is required" //title is required
+   end if
+   if  pPageData["content"] is empty then
+      return "Error: Content Raw is required" //content_raw is required
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pPageData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "pages" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end pageCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- pageGetByID 
+-- DESCRIPTION:
+--       This function get page by ID.
+-- PARAMETERS:
+--       pPageID: Page ID which we want to get
+--       pContext: Scope under which the request is made; determines fields present in response.
+--                          One of: View, embed or edit
+-- CHANGES:
+--       30/03/2016 Gohar: Created function
+-------------------------------------------------------------------------------------------------------------
+function pageGetByID pPageID, pContext
+   -- Check for required parameters
+   if pPageId is empty then
+      return "Error: PostId is required" //postid is required
+   end if
+   
+   -- Build the Parameters
+   put "pages/" into tAPICall
+   put pPageID after tAPICall
+   
+   -- Checkin context parameter
+   if pContext is "view" or pContext is "embed" then
+      put  "/?context=" & pContext after tAPICall
+   end if   
+   
+   -- For Edit context we need a access token
+   if pContext is "edit" then
+      accessTokenCheck
+      
+      put "/?access_token=" & sAccessToken["access_token"] after tAPICall
+      
+      put  "&context=" & pContext after tAPICall
+   end if   
+   
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall) 
+   
+   put it into tJsonData
+   return tJsonData
+end pageGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- pagesGetList
+-- DESCRIPTION:
+--       This function returns pages list with all data
+-- PARAMETERS:
+--       pParameters: Filters for list
+-- CHANGES:
+--       19/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function pagesGetList pParameters
+   -- Maximum number of items to be returned in result set. Default: 10
+   if pParameters["per_page"] is not empty then
+      put "&per_page=" & pParameters["per_page"] after tFilters
+   end if
+   
+   -- Scope under which the request is made; determines fields present in response. View, Embed or Edit
+   if pParameters["context"] is not empty then
+      if pParameters["context"] is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pParameters["context"] after tFilters
+      end if
+      put "&context=" & pParameters["context"] after tFilters
+   end if
+   
+   -- Current page of the collection. Default: 1
+   if pParameters["page"] is not empty then
+      put "&page=" & pParameters["page"] after tFilters
+   end if
+   
+   -- The order of the collection. Can either be asc or desc.
+   if pParameters["order"] is not empty then
+      put "&order=" & pParameters["order"] after tFilters
+   end if
+   
+   -- Sorting attribute of the collection. Possible values can be id, title or slug.
+   if pParameters["orderby"] is not empty then
+      put "&orderby=" & pParameters["orderby"] after tFilters
+   end if
+   
+   -- Limit the results to a post having a specific slug.
+   if pParameters["slug"] is not empty then
+      put "&slug=" & pParameters["slug"] after tFilters
+   end if
+   
+   -- Used to limit the collection of the posts having a particular status.
+   if pParameters["status"] is not empty then
+      put "&status=" & pParameters["status"] after tFilters
+   end if
+   
+   -- The author ID. Used to limit results belonging to a specific author.
+   if pParameters["author"] is not empty then
+      put "&author=" & pParameters["author"] after tFilters
+   end if
+   
+   -- The search query. Limit results to the matching string.
+   if pParameters["search"] is not empty then
+      put "&search=" & pParameters["search"] after tFilters
+   end if
+   
+   
+   -- Build API call
+   put "pages/" before tAPICall 
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Get all pages list
+   get URL(tPostURL & tAPICall & tFilters)
+   put it into tJsonData
+   
+   -- Converting pages data json to array for usability
+   put arrayFromJson(tJsonData) into tPagesList
+   
+   return tPagesList
+end pagesGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- pageDelete 
+-- DESCRIPTION:
+--       This function edit page
+-- PARAMETERS:
+--       pPageID: Page ID which we want to delete
+--       pPageData: Editing post data
+-- CHANGES:
+--       25/4/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function pageEdit pPageID, pPageData
+   accessTokenCheck
+   
+   --Checking and Buidling Parameters
+   if pPostDataID is empty then
+      return "Error: ID is required" //ID is required
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" into tHeader
+   set the httpheaders to tHeader
+   
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pPageData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "pages/" into tAPICall
+   put pPageID & "/?access_token=" & tAccessToken after tAPICall
+   
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Posting for editing the page
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then 
+      return 0
+   end if
+   return tResults
+end pageEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- pageEditWithLang
+-- DESCRIPTION:
+--       This function edit page by languages
+-- PARAMETERS:
+--       pPageID : ID of post which we want to edit
+--       pPageData: Editing page data
+-- CHANGES:
+--       02/05/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function pageEditWithLang pPageID, pPageData
+   accessTokenCheck
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Get url for posting 
+   put sWPAPI["post_url"] into tPostURL
+   
+   -- Create the URL used to call the REST service
+   put "pages/" & pPageID into tAPICall
+   
+   -- We need context for get the all languages list of our post
+   put "/?context=edit" after tAPICall
+   put "&access_token=" & tAccessToken after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall) 
+   put it into tEditingPageJson
+   
+   put arrayFromJson(tEditingPageJson) into tEditingPageArray
+   
+   -- Get languages of post title
+   put tEditingPageArray["title"]["raw"] into tTitleLangList
+   -- Put all title languages into array for changes
+   repeat with tIndex = 1 to the len of tTitleLangList
+      if char tIndex of tTitleLangList is "]" then
+         put char tIndex of tTitleLangList after tChar
+         put char tIndex-2 to tIndex-1 of tTitleLangList  into tTitleLang 
+         put tIndex into tCalc
+      else 
+         put char tIndex of tTitleLangList after tChar
+         
+         if tIndex is not 1 then
+            if char tIndex of tTitleLangList is "[" then
+               put char tCalc+1 to tIndex-1 of tTitleLangList into tTitleValue
+               put tTitleValue into tPageLang["title"][tTitleLang]
+            end if
+         end if
+      end if
+   end repeat
+   
+   -- Add languages which we want to edit or add
+   repeat for each key tKey in pPageData["title"]
+      put pPageData["title"][tKey] into tPageLang["title"][tKey] 
+   end repeat
+   
+   -- Get languages of post content
+   put tEditingPageArray["content"]["raw"] into tContentLangList
+   -- Put all content languages into array for changes
+   repeat with tIndex = 1 to the len of tContentLangList
+      if char tIndex of tContentLangList is "]" then
+         put char tIndex of tContentLangList after tChar
+         put char tIndex-2 to tIndex-1 of tContentLangList  into tContentLang 
+         put tIndex into tCalc
+      else 
+         put char tIndex of tContentLangList after tChar
+         
+         if tIndex is not 1 then
+            if char tIndex of tContentLangList is "[" then
+               put char tCalc+1 to tIndex-1 of tContentLangList into tContentValue
+               put tContentValue into tPostLang["content"][tContentLang]
+            end if
+         end if
+      end if
+   end repeat
+   
+   -- Add languages which we want to edit or add
+   repeat for each key tKey in pPageData["content"]
+      put pPageData["content"][tKey] into tPageLang["content"][tKey] 
+   end repeat
+   
+   
+   -- Build final line for title and content with all needed shortcodes
+   put empty into tTurnToContent
+   repeat for each element tElement in tPageLang
+      if tTurnToContent is not empty then
+         put "[vc_row][vc_column][vc_column_text]" into tContent
+         repeat for each key tKey in tElement
+            put "[:" & tKey & "]" & tElement[tKey] after tContent
+         end repeat
+         put "[/vc_column_text][/vc_column][/vc_row]" after tContent
+      else
+         repeat for each key tKey in tElement
+            put "[:" & tKey & "]" & tElement[tKey] after tTitle
+            put "content" into tTurnToContent
+         end repeat
+      end if
+   end repeat
+   
+   -- Build final array for posting
+   put tTitle into tEditPageArray["title"]
+   put tContent into tEditPageArray["content"]
+   
+   repeat for each key tKey in pPageData
+      if tKey is not "title" and tKey is not "content" then
+         put pPageData[tKey] into tEditPageArray[tKey]
+      end if
+   end repeat
+   
+   -- Convert to json for posting
+   put jsonFromArray(tEditPageArray) into tPostJson 
+   
+   -- Build URL
+   put "pages/" & pPageID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Post json data for editing
+   post tPostJson to URL (tPostURL & tAPICall)
+   put it into tResults 
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end pageEditWithLang
+
+
+-------------------------------------------------------------------------------------------------------------
+-- menusGetList  
+-- DESCRIPTION:
+--       This function get all menus list  
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function menusGetList
+   put sWPAPI["endpoint"] into tPostURL
+   
+   put "/wp-json/wp-api-menus/v2/menus/" into tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall)
+   put it into tMenusList
+   
+   return tMenusList
+end menusGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- menuGetByID  
+-- DESCRIPTION:
+--       This function get menu by id  
+-- PARAMETERS:
+--       pMenuID: ID of menu which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function menuGetByID pMenuID
+   -- Check for required parameters
+   if pMenuID is empty then
+      return "Error: MenuID is required" //menuid is required
+   end if
+   put sWPAPI["endpoint"] into tPostURL
+   
+   put "/wp-json/wp-api-menus/v2/menus/" & pMenuID into tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(tPostURL & tAPICall)
+   put it into tMenuJson
+   
+   return tMenuJson
+end menuGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- categoryCreate  
+-- DESCRIPTION:
+--       This function creates new category  
+-- PARAMETERS:
+--       pCategoryData: New created category data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function categoryCreate pCategoryData
+   accessTokenCheck
+   
+   -- For creating category we need data
+   if pCategoryData is empty then
+      return "Error: Category data is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pCategoryData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "categories" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end categoryCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- categoryEdit  
+-- DESCRIPTION:
+--       This function edit category  
+-- PARAMETERS:
+--       p CategoryID: Editing category id
+--       pCategoryData: Editing category data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function categoryEdit pCategoryID, pCategoryData
+   accessTokenCheck
+   
+   -- For category editing we need id and data
+   if pCategoryID is empty then
+      return "Error: Category id is required"
+   end if
+   
+   if pCategoryData is empty then
+      return "Error: Category data is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pCategoryData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "categories/" & pCategoryID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end categoryEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- categoryDelete  
+-- DESCRIPTION:
+--       This function delete category  
+-- PARAMETERS:
+--       pCategoryID: deleting category id
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function categoryDelete pCategoryID
+   accessTokenCheck
+   
+   -- For category editing we need id and data
+   if pCategoryID is empty then
+      return "Error: Category id is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "categories/" & pCategoryID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   delete URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end categoryDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- categoryGetByID  
+-- DESCRIPTION:
+--       This function get category by ID  
+-- PARAMETERS:
+--       pCategoryID: Category id which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function categoryGetByID pCategoryID
+   -- For getting id is required
+   if pCategoryID is empty then
+      return "Error: Category id is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "categories/" & pCategoryID into tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall) 
+   put it into tCategory
+   
+   return tCategory
+end categoryGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- categoriesGetList  
+-- DESCRIPTION:
+--       This function get all categories list  
+-- PARAMETERS:
+--       pParameters: Filters for getting list
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function categoriesGetList pParameters
+   -- Maximum number of items to be returned in result set. Default: 10
+   if pParameters["per_page"] is not empty then
+      put "&per_page=" & pParameters["per_page"] after tFilters
+   end if
+   
+   -- Scope under which the request is made; determines fields present in response. View, Embed or Edit
+   if pParameters["context"] is not empty then
+      if pParameters["context"] is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pParameters["context"] after tFilters
+      end if
+      put "&context=" & pParameters["context"] after tFilters
+   end if
+   
+   -- Current page of the collection. Default: 1
+   if pParameters["page"] is not empty then
+      put "&page=" & pParameters["page"] after tFilters
+   end if
+   
+   -- The order of the collection. Can either be asc or desc.
+   if pParameters["order"] is not empty then
+      put "&order=" & pParameters["order"] after tFilters
+   end if
+   
+   -- Sorting attribute of the collection. Possible values can be id, title or slug.
+   if pParameters["orderby"] is not empty then
+      put "&orderby=" & pParameters["orderby"] after tFilters
+   end if
+   
+   -- Limit the results to a post having a specific slug.
+   if pParameters["slug"] is not empty then
+      put "&slug=" & pParameters["slug"] after tFilters
+   end if
+   
+   -- Used to limit the collection of the posts having a particular status.
+   if pParameters["status"] is not empty then
+      put "&status=" & pParameters["status"] after tFilters
+   end if
+   
+   -- The author ID. Used to limit results belonging to a specific author.
+   if pParameters["author"] is not empty then
+      put "&author=" & pParameters["author"] after tFilters
+   end if
+   
+   -- The search query. Limit results to the matching string.
+   if pParameters["search"] is not empty then
+      put "&search=" & pParameters["search"] after tFilters
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "categories/" before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall & tFilters) 
+   put it into tCategory
+   
+   return tCategory
+end categoriesGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- tagCreate  
+-- DESCRIPTION:
+--       This function create new tag  
+-- PARAMETERS:
+--       pTagData: Creating tag data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function tagCreate pTagData
+   accessTokenCheck
+   
+   -- Checking parameters
+   if pTagData["name"] is empty then
+      return "Error: Tag name is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pTagData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "tags" into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end tagCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- tagEdit  
+-- DESCRIPTION:
+--       This function edit tag by id  
+-- PARAMETERS:
+--       pTagID: Tag ID which we want to edit
+--       pTagData: Editing tag data
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function tagEdit pTagID, pTagData
+   accessTokenCheck
+   
+   -- Checking parameters
+   if pTagData is empty then
+      return "Error: Tag data is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pTagData) into tPostJson
+   
+   -- Create the URL used to call the REST service
+   put "tags/" & pTagID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end tagEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- tagDelete  
+-- DESCRIPTION:
+--       This function delete tag by id  
+-- PARAMETERS:
+--       pTagID: Tag ID which we want to delete
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function tagDelete pTagID
+   accessTokenCheck
+   
+   -- Checking parameters
+   if pTagData is empty then
+      return "Error: Tag data is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "tags/" & pTagID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   delete URL(tPostURL & tAPICall)
+   put the result into tResult
+   
+   return tResult
+end tagDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- tagGetByID  
+-- DESCRIPTION:
+--       This function get tag by id  
+-- PARAMETERS:
+--       pTagID: Tag ID which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function tagGetByID pTagID
+   
+   -- Checking parameters
+   if pTagID is empty then
+      return "Error: Tag id is required"
+   end if
+   -- Create the URL used to call the REST service
+   put "tags/" & pTagID into tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tTagJson
+   
+   return tTagJson
+end tagGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- tagsGetList  
+-- DESCRIPTION:
+--       This function get all tags list  
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function tagsGetList 
+   -- Create the URL used to call the REST service
+   put "tags/" into tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL (tPostURL & tAPICall)
+   put it into tTagsList
+   
+   return arrayFromJson(tTagsList)
+end tagsGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- mediaCreate  
+-- DESCRIPTION:
+--       This function add new media  
+-- PARAMETERS:
+--       pMediaPath: Media path which we want to add
+--       pMediaData: Array with adding media data (eg. status, title, author, alt_text...)
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function mediaCreate pMediaPath, pMediaData
+   accessTokenCheck
+   
+   if pMediaPath is empty then
+      return "Error: For media file path is required"
+   end if
+   
+   -- file path
+   put "<file>" & pMediaPath into tFile
+   put "file," & tFile into tArray[3]
+   
+   -- check for selected file to upload
+   if libURLMultipartFormData(tForm, tArray) is not empty then
+      return it ##error
+   else
+      put URL("binfile:" & pMediaPath) into tBinary
+      
+      set the itemDel to "/"
+      put the last item of pMediaPath into tFileName
+      set the itemDel to comma
+      
+      -- Setting the http headers
+      put "Content-Type: Content-type: multipart/form-data" & cr after tHeader
+      put "Content-Disposition: attachment; filename=" & tFileName & cr after tHeader
+      set the httpheaders to tHeader
+      libURLSetSSLVerification false
+      
+      -- Getting access token for authentification
+      put sAccessToken["access_token"] into tAccessToken
+      
+      -- Create the URL used to call the REST service
+      put "media" into tAPICall
+      put "/?access_token=" & tAccessToken after tAPICall
+      
+      -- Get post URL
+      put sWPAPI["post_url"] into tPostURL
+      
+      -- Post image to the  word press
+      post tBinary to URL (tPostURL & tAPICall)
+      -- Get the added image Json
+      put it into tResults
+      put arrayFromJson(tResults) into tMediaArray
+      
+      -- Setting the http headers
+      put "Content-Type: application/json" & cr after tHeader
+      set the httpheaders to tHeader
+      
+      put tMediaArray["id"] into tCreatedMediaID
+      
+      -- Create the URL used to call the REST service
+      put "media/" & tCreatedMediaID into tAPICall
+      put "/?access_token=" & tAccessToken after tAPICall
+      
+      -- Convert passed array to Json for posting
+      put jsonFromArray(pMediaData) into tPostJson
+      
+      post tPostJson to URL(tPostURL & tAPICall)
+      put it into tResult
+      
+      return tResult
+   end if
+end mediaCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- mediaEdit  
+-- DESCRIPTION:
+--       This function edit media  
+-- PARAMETERS:
+--       pMediaID: Media id which we want to edit
+--       pMediaData: Array with adding media data (eg. status, title, author, alt_text...)
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function mediaEdit pMediaID, pMediaData
+   accessTokenCheck
+   
+   -- Checking parameters
+   if pMediaID is empty then
+      return "Error: Media id is required"
+   end if
+   
+      -- Checking parameters
+   if pMediaData is empty then
+      return "Error: Media data is required"
+   end if
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   
+   -- Create the URL used to call the REST service
+   put "media/" & pMediaID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- Convert passed array to Json for posting
+   put jsonFromArray(pMediaData) into tPostJson
+   
+   post tPostJson to URL(tPostURL & tAPICall)
+   
+   put it into tResults 
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end mediaEdit
+
+
+-------------------------------------------------------------------------------------------------------------
+-- mediaDelete  
+-- DESCRIPTION:
+--       This function delete media  
+-- PARAMETERS:
+--       pMediaID: Media id which we want to delete
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function mediaDelete pMediaID
+   accessTokenCheck
+   
+   -- Checking parameters
+   if pMediaID is empty then
+      return "Error: Media id is required"
+   end if
+   
+   -- Getting access token for authentification
+   put sAccessToken["access_token"] into tAccessToken
+   
+   -- Create the URL used to call the REST service
+   put "media/" & pMediaID into tAPICall
+   put "/?access_token=" & tAccessToken after tAPICall
+   
+   -- it is required for media deleting
+   put "&force=true" after tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   delete URL(tPostURL & tAPICall)
+   put the result into tResult
+   
+   return tResult
+end mediaDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- mediaGetByID  
+-- DESCRIPTION:
+--       This function get media data by id
+-- PARAMETERS:
+--       pMediaID: Media id which we want to get
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function mediaGetByID pMediaID
+   -- Checking parameters
+   if pMediaID is empty then
+      return "Error: Media id is required"
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "media/" & pMediaID into tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tMediaJson
+   
+   return tMediaJson
+end mediaGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- mediaGetList  
+-- DESCRIPTION:
+--       This function get all medias data
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       25/04/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function mediaGetList
+   -- Maximum number of items to be returned in result set. Default: 10
+   if pParameters["per_page"] is not empty then
+      put "&per_page=" & pParameters["per_page"] after tFilters
+   end if
+   
+   -- Scope under which the request is made; determines fields present in response. View, Embed or Edit
+   if pParameters["context"] is not empty then
+      if pParameters["context"] is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pParameters["context"] after tFilters
+      end if
+      put "&context=" & pParameters["context"] after tFilters
+   end if
+   
+   -- Current page of the collection. Default: 1
+   if pParameters["page"] is not empty then
+      put "&page=" & pParameters["page"] after tFilters
+   end if
+   
+   -- The order of the collection. Can either be asc or desc.
+   if pParameters["order"] is not empty then
+      put "&order=" & pParameters["order"] after tFilters
+   end if
+   
+   -- Sorting attribute of the collection. Possible values can be id, title or slug.
+   if pParameters["orderby"] is not empty then
+      put "&orderby=" & pParameters["orderby"] after tFilters
+   end if
+   
+   -- Limit the results to a post having a specific slug.
+   if pParameters["slug"] is not empty then
+      put "&slug=" & pParameters["slug"] after tFilters
+   end if
+   
+   -- Used to limit the collection of the posts having a particular status.
+   if pParameters["status"] is not empty then
+      put "&status=" & pParameters["status"] after tFilters
+   end if
+   
+   -- The author ID. Used to limit results belonging to a specific author.
+   if pParameters["author"] is not empty then
+      put "&author=" & pParameters["author"] after tFilters
+   end if
+   
+   -- The search query. Limit results to the matching string.
+   if pParameters["search"] is not empty then
+      put "&search=" & pParameters["search"] after tFilters
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "media/" before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall & tFilters)
+   put it into tMediaJson
+   
+   return tMediaJson
+end mediaGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postTypesGetList  
+-- DESCRIPTION:
+--       This function get all post types list
+-- PARAMETERS:
+--       pContext: The scope of the request. Possible values could be view, embed or edit.
+-- CHANGES:
+--       04/08/2015 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postTypesGetList pContext
+   -- Checking context parameter
+   if pContext is not empty then
+      -- For context "edit" access token is required
+      if pContext is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pContext after tAPICall
+      end if 
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "types" before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tJson
+   
+   return tJson
+end postTypesGetList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postTypesGetByType  
+-- DESCRIPTION:
+--       This function get all post types by type
+-- PARAMETERS:
+--       pType: Getting post's type
+--       pContext: The scope of the request. Possible values could be view, embed or edit.
+-- CHANGES:
+--       04/08/2015 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postTypesGetByType pType, pContext
+   -- Checking context parameter
+   if pContext is not empty then
+      -- For context "edit" access token is required
+      if pContext is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pContext after tAPICall
+      end if 
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "types/" & pType before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tJson
+   
+   return tJson
+end postTypesGetByType
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postStatusesGetList  
+-- DESCRIPTION:
+--       This function get all post status list
+-- PARAMETERS:
+--       pContext: The scope of the request. Possible values could be view, embed or edit.
+-- CHANGES:
+--       04/08/2015 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postStatusesGetList pContext
+   -- Checking context parameter
+   if pContext is not empty then
+      -- For context "edit" access token is required
+      if pContext is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pContext after tAPICall
+      end if 
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "statuses" before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tJson
+   
+   return tJson
+end postStatusesGetList
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- postStatusesGetByStatus  
+-- DESCRIPTION:
+--       This function get post status by status
+-- PARAMETERS:
+--       pType: Getting post's type
+--       pContext: The scope of the request. Possible values could be view, embed or edit.
+-- CHANGES:
+--       04/08/2015 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function postStatusesGetByStatus pStatus, pContext
+   -- Checking context parameter
+   if pContext is not empty then
+      -- For context "edit" access token is required
+      if pContext is "edit" then
+         accessTokenCheck
+         
+         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pContext after tAPICall
+      end if 
+   end if
+   
+   -- Create the URL used to call the REST service
+   put "statuses/" & pStatus before tAPICall
+   
+   -- Get post URL
+   put sWPAPI["post_url"] into tPostURL
+   
+   get URL(tPostURL & tAPICall)
+   put it into tJson
+   
+   return tJson
+end postStatusesGetByStatus
