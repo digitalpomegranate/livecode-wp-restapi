@@ -1,0 +1,2893 @@
+﻿script "wooCommerceAPI"
+local sWCAuthParams
+local sPostURL
+
+--------------------------------------------------------------------------------------------------------------------
+-- initWooAPIStack  
+-- DESCRIPTION:
+--       For WooCommerce api we need URLs and https
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek : Created function
+--------------------------------------------------------------------------------------------------------------------
+command initWooAPIStack
+   
+   --Set user credentials
+   --WooCommerce
+   put empty into sPostURL
+   put "https://test.buildatourapp.com/wp-json/wc/v1/" into sPostURL
+   
+   put "ck_2750bcfa3d1bc84d0286338d04a2d97e6c8d44e7" into tWCAuthKey
+   put "cs_948c1f856a8c3c0f29a3182c607b2c607c59b539" into tWCAuthSecret
+   
+   -- Authorization with consumer_key and cunsumer_secret 
+   put "consumer_key=" & tWCAuthKey & "&" & "consumer_secret=" & tWCAuthSecret  into sWCAuthParams
+end initWooAPIStack
+
+
+#################################################################
+# MENTION : working with https only
+#
+# You can read all wooCom REST API documentation here:
+#      https://woothemes.github.io/woocommerce-rest-api-docs/
+#
+#
+#################################################################
+
+
+-------------------------------------------------------------------------------------------------------------
+-- storeDataGet  
+-- DESCRIPTION:
+--       This function returns your site store data all(json)
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek : Created function
+-------------------------------------------------------------------------------------------------------------
+function storeDataGet
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put URL(sPostURL) into tJsonData
+   
+   return tJsonData
+end storeDataGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderCreate  
+-- DESCRIPTION:
+--       This function returns the store json data
+-- PARAMETERS:
+--       pOrderData:  Data array of orders details
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderCreate pOrderData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pOrderData) to json
+   put ArrayToJSON(pOrderData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- send data
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   
+   return tResults
+end orderCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderUpdate
+-- DESCRIPTION:
+--       This API lets you make changes to an order.
+-- PARAMETERS:
+--       pOrderID: Order's ID which we want to update
+--       pStatus: Status of order - completed or processing
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderUpdate pOrderID,pStatus
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(orderArr) to Json
+   put pStatus into orderArr["order"]["status"]
+   put  ArrayToJSON(orderArr) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url
+   put "/" & pOrderID & "?" & sWCAuthParams after tAPICall
+   
+   --send json data to web url
+   post tJson to URL(sPostURL & tAPICall)
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- ordersCreateOrUpdate
+-- DESCRIPTION:
+--       To update is necessary to send objects containing IDs and to create new not just send the ID.
+-- PARAMETERS:
+--       pOrdersData: Order's imformation array
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function ordersCreateOrUpdate pOrdersData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pOrderData) to Json
+   put  ArrayToJSON(pOrdersData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/bulk
+   put "/" & "bulk" & "?" & sWCAuthParams after tAPICall
+   
+   --send json data to web url
+   put tJson into URL(sPostURL & tAPICall)
+   put it into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end ordersCreateOrUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderDelete
+-- DESCRIPTION:
+--       This API helps you delete an order.
+-- PARAMETERS:
+--       pOrdersID: Order's ID which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderDelete pOrderID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/id
+   put "/" & pOrderID & "?" & sWCAuthParams after tAPICall
+   
+   --delete url included order ID - to delete data
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderDelete
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderNotesGetAll
+-- DESCRIPTION:
+--       This API lets you retrieve a list of orders statuses available.
+-- PARAMETERS:
+--       pOrderID: Order ID which note we want to get
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderNotesGetAll pOrderID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/notes
+   put "/" & pOrderID & "/notes" & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   put it into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderNotesGetAll
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderNotesGet
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific note from an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which we want to get
+--       pNoteID: Order's note ID which we want to get
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderNoteGet pOrderID, pNoteID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/notes/<note_id>
+   put "/" & pOrderID & "/notes/" & pNoteID & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderNoteGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderNoteCreate
+-- DESCRIPTION:
+--       This API helps you to create a new note for an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which we want to create
+--       pNoteData: Creating note data
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderNoteCreate pOrderID, pNoteData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   --build url /wc-api/v3/orders/<id>/notes
+   put "/" & pOrderID & "/notes" & "?" & sWCAuthParams after tAPICall
+   
+   --get notes data
+   put ArrayToJSON(pNoteData) into tJson
+   -- send data via post request
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderNoteCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderNoteUpdate
+-- DESCRIPTION:
+--       This API helps you to create a new note for an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which we want to create
+--       pNoteID: Note ID which we want to update
+--       pNoteData: Updating note data
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderNoteUpdate pOrderID, pNoteID, pNoteData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   --build url /wc-api/v3/orders/<id>/notes/<note_id>
+   put "/" & pOrderID & "/notes/" & pNoteID & "?" & sWCAuthParams after tAPICall
+   
+   --get notes data
+   put ArrayToJSON(pNoteData) into tJson
+   -- send data via post request
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderNoteUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderNoteDelete
+-- DESCRIPTION:
+--       This API helps you to create a new note for an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which we want to delete
+--       pNoteID: Note ID which we want to delete
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderNoteDelete pOrderID, pNoteID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/notes/<note_id>
+   put "/" & pOrderID & "/notes/" & pNoteID & "?" & sWCAuthParams after tAPICall
+   
+   -- delete data
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderNoteDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderRefundCreate
+-- DESCRIPTION:
+--       This API helps you to create a new refund for an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which we want to delete
+--       pRefundData: Our new creating refund data
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderRefundCreate pOrderID, pRefundData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/refunds
+   put "/" & pOrderID & "/refunds" & "?" & sWCAuthParams after tAPICall
+   
+   --get notes data
+   put ArrayToJSON(pRefundData) into tJson
+   
+   -- send data via post request
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderRefundCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderRefundUpdate
+-- DESCRIPTION:
+--       This API helps you to create a new refund for an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which we want to delete
+--       pRefundID: Refund ID which we want to update
+--       pRefundData: Our new creating refund data
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderRefundUpdate pOrderID, pRefundID, pRefundData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/refunds/<refund_id>
+   put "/" & pOrderID & "/refunds/" & pRefundID & "?" & sWCAuthParams after tAPICall
+   
+   --get notes data
+   put ArrayToJSON(pRefundData) into tJson
+   
+   -- send data via post request
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderRefundUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderRefundDelete
+-- DESCRIPTION:
+--       This API helps you delete an order refund.
+-- PARAMETERS:
+--       pOrderID: Order ID which refund we want to delete
+--       pRefundID: Refund ID which we want to delete
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderRefundDelete pOrderID, pRefundID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/refunds/<refund_id>
+   put "/" & pOrderID & "/refunds/" & pRefundID & "?" & sWCAuthParams after tAPICall
+   
+   -- deleting order's refund
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderRefundDelete
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderRefundGet
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific refund from an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which refund we want to get
+--       pRefundID: Refund ID which we want to get
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderRefundGet pOrderID, pRefundID
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/refunds/<refund_id>
+   put "/" & pOrderID & "/refunds/" & pRefundID & "?" & sWCAuthParams after tAPICall
+   
+   -- get data with sending get http request
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderRefundGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderRefundsGetAll
+-- DESCRIPTION:
+--       This API helps you to view all the refunds from an order.
+-- PARAMETERS:
+--       pOrderID: Order ID which refund we want to get
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderRefundsGetAll pOrderID
+   
+   -- Create the URL used to call the REST service
+   put "orders" into tAPICall
+   
+   --build url /wc-api/v3/orders/<id>/refunds
+   put "/" & pOrderID & "/refunds" & "?" & sWCAuthParams after tAPICall
+   
+   -- get data with sending get http request
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end orderRefundsGetAll
+
+
+-------------------------------------------------------------------------------------------------------------
+-- couponCreate
+-- DESCRIPTION:
+--       This API helps you to create a new coupon.
+-- PARAMETERS:
+--       pCouponDataA: New created coupon data
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function couponCreate pCouponDataA
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCouponDataA) to Json
+   put  ArrayToJSON(pCouponDataA) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "coupons" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end couponCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- couponUpdate
+-- DESCRIPTION:
+--       This API helps you to create a new coupon.
+-- PARAMETERS:
+--       pCouponID: Coupon ID which we want to update 
+--       pCouponDataA: Updateing coupon data
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function couponUpdate pCouponID, pCouponDataA
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCouponDataA) to Json
+   put  ArrayToJSON(pCouponDataA) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "coupons" into tAPICall
+   put "/" & pCouponID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end couponUpdate
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- couponsCreateOrUpdate
+-- DESCRIPTION:
+--       This API helps you to create or update multiple coupons.
+--       For updating we need IDs
+-- PARAMETERS:
+--       pCouponDataA: Creating or updating coupon data
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function couponsCreateOrUpdate pCouponDataA
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCouponDataA) to Json
+   put  ArrayToJSON(pCouponDataA) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "coupons" into tAPICall
+   put "/" & "bulk" & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end couponsCreateOrUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- couponGetByCode
+-- DESCRIPTION:
+--       This API helps you to get coupon by code
+-- PARAMETERS:
+--       pCouponCode: Coupon's unique code
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function couponGetByID pCouponID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   put "coupons" into tAPICall
+   
+   put "/" & pCouponID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end couponGetByID
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- couponDelete
+-- DESCRIPTION:
+--       This API helps you to delete coupon.
+-- PARAMETERS:
+--       pCouponID: Coupon's ID which we want to delete
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function couponDelete pCouponID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   put "coupons" into tAPICall
+   
+   put "/" & pCouponCode & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   delete URL(sPostURL & tAPICall)
+   return tJsonData
+end couponDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- couponsSearch
+-- DESCRIPTION:
+--       This API helps you to view(get)  all coupons.
+-- PARAMETERS:
+--       pParameters: Pass array with all filters values
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+--       12/04/2016 Narek: Changed function namq and add parameter which contains filter values for filtering
+--                                            check all filters and when we have one add after api call
+-------------------------------------------------------------------------------------------------------------
+function couponsSearch pParameters
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   
+   -- NOTE:
+   --      That dates format should be: YYYY-MM-DDTHH:MM:SSZ
+   
+   -- Given a date, only customers created after the provided date will be returned
+   if pParameters["created_at_min"] is not empty then
+      put pParameters["created_at_min"] into tCreatedAtMin
+      
+      put "&filter[created_at_min]=" & tCreatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers created before the provided date will be returned
+   if pParameters["created_at_max"] is not empty then
+      put pParameters["created_at_max"] into tCreatedAtMax
+      
+      put "&filter[created_at_max]=" & tCreatedAtMax after tFilters
+   end if
+   
+   -- Given a date, only customers updated after the provided date will be returned
+   if pParameters["updated_at_min"] is not empty then
+      put pParameters["updated_at_min"] into tUpdatedAtMin
+      
+      put "&filter[updated_at_min]=" & tUpdatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers updated before the provided date will be returned
+   if pParameters["updated_at_max"] is not empty then
+      put pParameters["updated_at_max"] into tUpdatedAtMax
+      
+      put "&filter[updated_at_max]=" & tUpdatedAtMax after tFilters
+   end if
+   
+   -- Performs a keyword search and returns customers that match
+   if pParameters["keyword"] is not empty then
+      put pParameters["updated_at_max"] into tSearchKeyword
+      
+      put "&filter[q]=" & tSearchKeyword after tFilters
+   end if
+   
+   -- Controls the ordering of the customers returned, accepted values are ASC (default) or DESC (by date)
+   if pParameters["order"] is not empty then
+      put pParameters["order"] into tOrderType
+      
+      put "&filter[order]=" & tOrderType after tFilters
+   end if
+   
+   -- Controls the field that is used for ordering the resources returned
+   if pParameters["orderby"] is not empty then
+      put pParameters["orderby"] into tOrderKey
+      
+      put "&filter[orderby]=" & tOrderKey after tFilters
+   end if
+   
+   -- The meta key to order returned resources by when using "orderby=meta_value"
+   /*
+   For example:
+   GET:  /products?filter[orderby]=meta_value_num&filter[orderby_meta_key]=_price
+   */
+   if pParameters["orderby_meta_key"] is not empty then
+      put pParameters["orderby_meta_key"] into tOrderType
+      
+      put "&filter[orderby_meta_key]=" & tOrderType after tFilters
+   end if
+   
+   -- Limits productes to only those with the specified post status
+   if pParameters["post_status"] is not empty then
+      put pParameters["post_status"] into tPostStatus
+      
+      put "&filter[post_status]=" & tPostStatus after tFilters
+   end if
+   
+   -- Resource meta is excluded by default, but it can be included by setting "meta=true"
+   if pParameters["meta"] is not empty then
+      put pParameters["meta"] into tMetaStatus
+      
+      put "&filter[meta]=" & tMetaStatus after tFilters
+   end if
+   
+   -- You may limit the fields returned in the response using the fields parameter
+   -- You need to pass you fields parameter divided by comma:" id,status,payment_details"
+   if pParameters["fields"] is not empty then
+      put pParameters["fields"] into tFieldsParameters
+      
+      put "&fields=" & tFieldsParameters after tFilters
+   end if
+   
+   -- Requests that return multiple items will be paginated to 10 items by default.
+   if pParameters["limit"] is not empty then
+      put pParameters["limit"] into tReturnedCustomersCount
+      
+      put "&filter[limit]=" & tReturnedCustomersCount after tFilters
+   end if
+   
+   
+   put "coupons" into tAPICall
+   put "?" & sWCAuthParams & tFilters after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall & tFilters) 
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+   
+end couponsSearch
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- ordersGetAll
+-- DESCRIPTION:
+--       This API helps you to get all orders 
+-- PARAMETERS:
+--       pParameters: Pass array with all filters values
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+--       13/04/2016 Narek: Changed function namq and add parameter which contains filter values for filtering
+--                                            check all filters and when we have one add after api call
+-------------------------------------------------------------------------------------------------------------
+function ordersSearch pParameters
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- NOTE:
+   --      That dates format should be: YYYY-MM-DDTHH:MM:SSZ
+   
+   -- Given a date, only customers created after the provided date will be returned
+   if pParameters["created_at_min"] is not empty then
+      put pParameters["created_at_min"] into tCreatedAtMin
+      
+      put "&filter[created_at_min]=" & tCreatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers created before the provided date will be returned
+   if pParameters["created_at_max"] is not empty then
+      put pParameters["created_at_max"] into tCreatedAtMax
+      
+      put "&filter[created_at_max]=" & tCreatedAtMax after tFilters
+   end if
+   
+   -- Given a date, only customers updated after the provided date will be returned
+   if pParameters["updated_at_min"] is not empty then
+      put pParameters["updated_at_min"] into tUpdatedAtMin
+      
+      put "&filter[updated_at_min]=" & tUpdatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers updated before the provided date will be returned
+   if pParameters["updated_at_max"] is not empty then
+      put pParameters["updated_at_max"] into tUpdatedAtMax
+      
+      put "&filter[updated_at_max]=" & tUpdatedAtMax after tFilters
+   end if
+   
+   -- Performs a keyword search and returns customers that match
+   if pParameters["keyword"] is not empty then
+      put pParameters["updated_at_max"] into tSearchKeyword
+      
+      put "&filter[q]=" & tSearchKeyword after tFilters
+   end if
+   
+   -- Controls the ordering of the customers returned, accepted values are ASC (default) or DESC (by date)
+   if pParameters["order"] is not empty then
+      put pParameters["order"] into tOrderType
+      
+      put "&filter[order]=" & tOrderType after tFilters
+   end if
+   
+   -- Controls the field that is used for ordering the resources returned
+   if pParameters["orderby"] is not empty then
+      put pParameters["orderby"] into tOrderKey
+      
+      put "&filter[orderby]=" & tOrderKey after tFilters
+   end if
+   
+   -- The meta key to order returned resources by when using "orderby=meta_value"
+   /*
+   For example:
+   GET:  /products?filter[orderby]=meta_value_num&filter[orderby_meta_key]=_price
+   */
+   if pParameters["orderby_meta_key"] is not empty then
+      put pParameters["orderby_meta_key"] into tOrderType
+      
+      put "&filter[orderby_meta_key]=" & tOrderType after tFilters
+   end if
+   
+   -- Limits productes to only those with the specified post status
+   if pParameters["post_status"] is not empty then
+      put pParameters["post_status"] into tPostStatus
+      
+      put "&filter[post_status]=" & tPostStatus after tFilters
+   end if
+   
+   -- Resource meta is excluded by default, but it can be included by setting "meta=true"
+   if pParameters["meta"] is not empty then
+      put pParameters["meta"] into tMetaStatus
+      
+      put "&filter[meta]=" & tMetaStatus after tFilters
+   end if
+   
+   -- You may limit the fields returned in the response using the fields parameter
+   -- You need to pass you fields parameter divided by comma:" id,status,payment_details"
+   if pParameters["fields"] is not empty then
+      put pParameters["fields"] into tFieldsParameters
+      
+      put "&fields=" & tFieldsParameters after tFilters
+   end if
+   
+   -- Requests that return multiple items will be paginated to 10 items by default.
+   if pParameters["limit"] is not empty then
+      put pParameters["limit"] into tReturnedCustomersCount
+      
+      put "&filter[limit]=" & tReturnedCustomersCount after tFilters
+   end if
+   
+   put "orders" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall & tFilters)
+   put it into tJsonData
+   
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end ordersSearch
+
+
+-------------------------------------------------------------------------------------------------------------
+-- orderGetbyID
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific order.
+-- PARAMETERS:
+--       pOrderID: Order Id which we want to get
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function orderGetbyID pOrderID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   put "orders" into tAPICall
+   put "/" & pOrderID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   
+   return tArray
+end orderGetbyID
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customerCreate
+-- DESCRIPTION:
+--       This function let you to create new customer 
+-- PARAMETERS:
+--       pCustomerData: Creating customer data
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function customerCreate pCustomerData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pPostData) to Json
+   put  ArrayToJSON(pCustomerData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "customers" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   if tResults is empty then   
+      return 0
+   end if
+   return tArray
+end customerCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customersSearch
+-- DESCRIPTION:
+--       This API helps you to view all the customers and filtering them
+-- PARAMETERS:
+--       pParameters: Pass array with all filters values
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+--       11/04/2016 Narek: Changed function namq and add parameter which contains filter values for filtering
+--                                            check all filters and when we have one add after api call
+-------------------------------------------------------------------------------------------------------------
+function customersSearch pParameters
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   
+   -- NOTE:
+   --      That dates format should be: YYYY-MM-DDTHH:MM:SSZ
+   
+   -- Given a date, only customers created after the provided date will be returned
+   if pParameters["created_at_min"] is not empty then
+      put pParameters["created_at_min"] into tCreatedAtMin
+      
+      put "&filter[created_at_min]=" & tCreatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers created before the provided date will be returned
+   if pParameters["created_at_max"] is not empty then
+      put pParameters["created_at_max"] into tCreatedAtMax
+      
+      put "&filter[created_at_max]=" & tCreatedAtMax after tFilters
+   end if
+   
+   -- Given a date, only customers updated after the provided date will be returned
+   if pParameters["updated_at_min"] is not empty then
+      put pParameters["updated_at_min"] into tUpdatedAtMin
+      
+      put "&filter[updated_at_min]=" & tUpdatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers updated before the provided date will be returned
+   if pParameters["updated_at_max"] is not empty then
+      put pParameters["updated_at_max"] into tUpdatedAtMax
+      
+      put "&filter[updated_at_max]=" & tUpdatedAtMax after tFilters
+   end if
+   
+   
+   -- Performs a keyword search and returns customers that match
+   if pParameters["keyword"] is not empty then
+      put pParameters["updated_at_max"] into tSearchKeyword
+      
+      put "&filter[q]=" & tSearchKeyword after tFilters
+   end if
+   
+   
+   ############################################################
+   #
+   # Parameters documentation:
+   #         https://woothemes.github.io/woocommerce-rest-api-docs/#parameters
+   #
+   # About order and orderby parameters:
+   #         http://codex.wordpress.org/Class_Reference/WP_Query#Order_.26_Orderby_Parameters
+   #
+   ############################################################
+   
+   -- Controls the ordering of the customers returned, accepted values are ASC (default) or DESC (by date)
+   if pParameters["order"] is not empty then
+      put pParameters["order"] into tOrderType
+      
+      put "&filter[order]=" & tOrderType after tFilters
+   end if
+   
+   -- Controls the field that is used for ordering the resources returned
+   if pParameters["orderby"] is not empty then
+      put pParameters["orderby"] into tOrderKey
+      
+      put "&filter[orderby]=" & tOrderKey after tFilters
+   end if
+   
+   -- The meta key to order returned resources by when using "orderby=meta_value"
+   /*
+   For example:
+   GET:  /products?filter[orderby]=meta_value_num&filter[orderby_meta_key]=_price
+   */
+   if pParameters["orderby_meta_key"] is not empty then
+      put pParameters["orderby_meta_key"] into tOrderType
+      
+      put "&filter[orderby_meta_key]=" & tOrderType after tFilters
+   end if
+   
+   
+   -- Resource meta is excluded by default, but it can be included by setting "meta=true"
+   if pParameters["meta"] is not empty then
+      put pParameters["meta"] into tMetaStatus
+      
+      put "&filter[meta]=" & tMetaStatus after tFilters
+   end if
+   
+   
+   -- You may limit the fields returned in the response using the fields parameter
+   -- You need to pass you fields parameter divided by comma:" id,status,payment_details"
+   if pParameters["fields"] is not empty then
+      put pParameters["fields"] into tFieldsParameters
+      
+      put "&fields=" & tFieldsParameters after tFilters
+   end if
+   
+   -- Requests that return multiple items will be paginated to 10 items by default.
+   if pParameters["limit"] is not empty then
+      put pParameters["limit"] into tReturnedCustomersCount
+      
+      put "&filter[limit]=" & tReturnedCustomersCount after tFilters
+   end if
+   
+   
+   put "customers" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end customersSearch
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customerGetByID
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific customer by ID
+-- PARAMETERS:
+--       pCustomerID: Customer ID which we want to get
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function customerGetByID pCustomerID
+   
+   put "customers" into tAPICall
+   put "/" & pCustomerID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall) 
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end customerGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customerOrdersGet
+-- DESCRIPTION:
+--       This API lets you retrieve the customer orders.
+-- PARAMETERS:
+--       pCustomerID: Customer ID which orders we want to get
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function customerOrdersGet pCustomerID
+   
+   -- Create the URL used to call the REST service
+   put "customers" into tAPICall
+   put "/" & pCustomerID & "/" & "orders" & "?" & sWCAuthParams after tAPICall
+   
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end customerOrdersGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customerDownloadsGet
+-- DESCRIPTION:
+--       This API lets you retrieve the customers downloads.
+-- PARAMETERS:
+--       pCustomerID: Customer ID which downloads we want to get
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function customerDownloadsGet pCustomerID
+   
+   put "customers" into tAPICall
+   put "/" & pCustomerID & "/" & "downloads" & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end customerDownloadsGet
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customerUpdate
+-- DESCRIPTION:
+--       This API lets you update(edit) customer.
+-- PARAMETERS:
+--       pCustomerID: Customer ID which we want to update
+--       pCustomerData: Data array of customers details
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function customerUpdate pCustomerID, pCustomerData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pPostData) to Json
+   put  ArrayToJSON(pCustomerData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "customers" into tAPICall
+   put "/" & pCustomerID after tAPICall 
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end customerUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- customerDelete
+-- DESCRIPTION:
+--       This API helps you delete a customer.
+-- PARAMETERS:
+--       pCustomerID: Customer ID which we want to delete
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function customerDelete pCustomerID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "customers" into tAPICall
+   put "/" & pCustomerID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end customerDelete
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAdd
+-- DESCRIPTION:
+--       This API helps you to create a new product.
+-- PARAMETERS:
+--       pProductData: Data array of product details
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAdd pProductData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pProductData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAdd
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productsSearch
+-- DESCRIPTION:
+--       This API helps you to view all the products.
+-- PARAMETERS:
+--       pParameters: Pass array with all filters values
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+--       12/04/2016 Narek: Changed function namq and add parameter which contains filter values for filtering
+--                                            check all filters and when we have one add after api call
+-------------------------------------------------------------------------------------------------------------
+function productsSearch pParameters
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- NOTE:
+   --      That dates format should be: YYYY-MM-DDTHH:MM:SSZ
+   
+   -- Given a date, only customers created after the provided date will be returned
+   if pParameters["created_at_min"] is not empty then
+      put pParameters["created_at_min"] into tCreatedAtMin
+      
+      put "&filter[created_at_min]=" & tCreatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers created before the provided date will be returned
+   if pParameters["created_at_max"] is not empty then
+      put pParameters["created_at_max"] into tCreatedAtMax
+      
+      put "&filter[created_at_max]=" & tCreatedAtMax after tFilters
+   end if
+   
+   -- Given a date, only customers updated after the provided date will be returned
+   if pParameters["updated_at_min"] is not empty then
+      put pParameters["updated_at_min"] into tUpdatedAtMin
+      
+      put "&filter[updated_at_min]=" & tUpdatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers updated before the provided date will be returned
+   if pParameters["updated_at_max"] is not empty then
+      put pParameters["updated_at_max"] into tUpdatedAtMax
+      
+      put "&filter[updated_at_max]=" & tUpdatedAtMax after tFilters
+   end if
+   
+   
+   -- Performs a keyword search and returns customers that match
+   if pParameters["keyword"] is not empty then
+      put pParameters["updated_at_max"] into tSearchKeyword
+      
+      put "&filter[q]=" & tSearchKeyword after tFilters
+   end if
+   
+   -- Controls the ordering of the customers returned, accepted values are ASC (default) or DESC (by date)
+   if pParameters["order"] is not empty then
+      put pParameters["order"] into tOrderType
+      
+      put "&filter[order]=" & tOrderType after tFilters
+   end if
+   
+   -- Controls the field that is used for ordering the resources returned
+   if pParameters["orderby"] is not empty then
+      put pParameters["orderby"] into tOrderKey
+      
+      put "&filter[orderby]=" & tOrderKey after tFilters
+   end if
+   
+   -- The meta key to order returned resources by when using "orderby=meta_value"
+   /*
+   For example:
+   GET:  /products?filter[orderby]=meta_value_num&filter[orderby_meta_key]=_price
+   */
+   if pParameters["orderby_meta_key"] is not empty then
+      put pParameters["orderby_meta_key"] into tOrderType
+      
+      put "&filter[orderby_meta_key]=" & tOrderType after tFilters
+   end if
+   
+   -- Limits productes to only those with the specified post status
+   if pParameters["post_status"] is not empty then
+      put pParameters["post_status"] into tPostStatus
+      
+      put "&filter[post_status]=" & tPostStatus after tFilters
+   end if
+   
+   -- Resource meta is excluded by default, but it can be included by setting "meta=true"
+   if pParameters["meta"] is not empty then
+      put pParameters["meta"] into tMetaStatus
+      
+      put "&filter[meta]=" & tMetaStatus after tFilters
+   end if
+   
+   -- You may limit the fields returned in the response using the fields parameter
+   -- You need to pass you fields parameter divided by comma:" id,status,payment_details"
+   if pParameters["fields"] is not empty then
+      put pParameters["fields"] into tFieldsParameters
+      
+      put "&fields=" & tFieldsParameters after tFilters
+   end if
+   
+   -- Requests that return multiple items will be paginated to 10 items by default.
+   if pParameters["limit"] is not empty then
+      put pParameters["limit"] into tReturnedCustomersCount
+      
+      put "&filter[limit]=" & tReturnedCustomersCount after tFilters
+   end if
+   
+   
+   put "products" into tAPICall
+   put "?" & sWCAuthParams & tFilters after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   put JSONToArray(tJsonData) into tProductsArray
+   
+   return tProductsArray
+end productsSearch
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productGetbyID
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific product by ID
+-- PARAMETERS:
+--       pProductID: Product ID which we want to get
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productGetbyID pProductID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   put "products" into tAPICall
+   put "/" & pProductID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end productGetbyID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productUpdate
+-- DESCRIPTION:
+--       This API lets you make changes to a product.
+-- PARAMETERS:
+--       pProductID: Product ID which we want to update
+--      pProductData: Data array of updating product details
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productUpdate pProductID, pProductData
+   
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pProductData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/" & pProductID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productUpdate
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productDelete
+-- DESCRIPTION:
+--       This API helps you delete a product.
+-- PARAMETERS:
+--       pProductID: Product ID which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productDelete pProductID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pProductsData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/" & pProductID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productDelete
+
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productOrdersGetbyID
+-- DESCRIPTION:
+--       This API lets you retrieve a product data by id
+-- PARAMETERS:
+--       pProductID: Products ID which orders we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productOrdersGetbyID pProductID
+   
+   put "products" into tAPICall
+   put "/" & pProductID & "/orders" & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   return tJsonData
+end productOrdersGetbyID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productReviewsGet
+-- DESCRIPTION:
+--       This API lets you retrieve all reviews of a product.
+-- PARAMETERS:
+--       pProductID: Products ID which reviews we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productReviewsGet pProductID
+   
+   put "products" into tAPICall
+   put "/" & pProductID & "/reviews" & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   put URL(sPostURL & tAPICall) into tJsonData
+   return tJsonData
+end productReviewsGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeCreate
+-- DESCRIPTION:
+--       This API lets you create attribute for product.
+-- PARAMETERS:
+--       pAttributeData: Creating attribute data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeCreate pAttributeData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pAttributeData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeGetbyID
+-- DESCRIPTION:
+--       This API lets you get product's attribute.
+-- PARAMETERS:
+--        pAttributeID: Attribute ID which we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeGetbyID pAttributeID
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "/" & pAttributeID & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeGetbyID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributesListGet
+-- DESCRIPTION:
+--       This API lets you to get product attributes list.
+-- PARAMETERS:
+--        none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributesListGet
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" &  "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributesListGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeUpdate
+-- DESCRIPTION:
+--       This API lets you make changes to a product attribute.
+-- PARAMETERS:
+--        pAttributeID: Attribute id which we want to update
+--        pAttributeData: Changing attribute data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeUpdate pAttributeID, pAttributeData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pAttributeData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "/" & pAttributeID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeDelete
+-- DESCRIPTION:
+--       This API lets you delete product's attribute.
+-- PARAMETERS:
+--        pAttributeID: Attribute id which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeDelete pAttributeID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "/" & pAttributeID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeTermCreate
+-- DESCRIPTION:
+--       This API lets you delete product's attribute.
+-- PARAMETERS:
+--        pAttributeID: Attribute id
+--        pTermData: Term data which we want to create
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeTermCreate pAttributeID, pTermData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pTermData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "/" & pAttributeID & "/terms" & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeTermCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeTermGetByID
+-- DESCRIPTION:
+--       This API lets you retrieve a product attribute term by ID.
+-- PARAMETERS:
+--        pAttributeID: Attribute id which we want to get
+--        pAttributeTermID: Term id which we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeTermGetByID pAttributeID, pAttributeTermID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/attributes/" into tAPICall
+   
+   put pAttributeID & "/terms/" &  pAttributeTermID & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeTermGetByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeTermGetAll
+-- DESCRIPTION:
+--       This API lets you retrieve all terms from a product attribute.
+-- PARAMETERS:
+--        pAttributeID: Attribute id which terms we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeTermGetAll pAttributeID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/attributes/" into tAPICall
+   put pAttributeID & "/terms" & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeTermGetAll
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeTermUpdate
+-- DESCRIPTION:
+--       This API helps you to upadte product attribute term by id.
+-- PARAMETERS:
+--        pAttributeID: Attribute id which terms we want to get
+--        pTermData: Updating term data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+---------------------------------------------------------------------------------------------------------------
+function productAttributeTermUpdate pAttributeID, pTermData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pTermData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "/" & pAttributeID & "/terms" & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeTermUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productAttributeTermDelete
+-- DESCRIPTION:
+--       This API helps you to delete product attribute term by id.
+-- PARAMETERS:
+--        pAttributeID: Attribute id which terms we want to delete
+--        pTermID: Term id which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productAttributeTermDelete pAttributeID, pTermID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products" into tAPICall
+   put "/attributes" & "/" & pAttributeID & "/terms" & pTermID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productAttributeTermDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productCategoryCreate
+-- DESCRIPTION:
+--       This API helps you to create a new product category.
+-- PARAMETERS:
+--        pCategoryData: Creating category data(array)
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productCategoryCreate pCategoryData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pCategoryData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/categories" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productCategoryCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productGetCategoryByID
+-- DESCRIPTION:
+--       This API lets you retrieve a product category by ID.
+-- PARAMETERS:
+--        pCategoryID: Category id which we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productGetCategoryByID pCategoryID
+   libURLSetSSLVerification false
+   
+   --Convert Array(pProductData) to Json
+   put  ArrayToJSON(pCategoryData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/categories/" into tAPICall
+   put pCategoryID & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productGetCategoryByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productCategoriesGetAll
+-- DESCRIPTION:
+--       This API lets you retrieve a product categories
+-- PARAMETERS:
+--        none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productCategoriesGetAll
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/categories" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productCategoriesGetAll
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productCategoryUpdate
+-- DESCRIPTION:
+--       This API lets you make changes to a product category.
+-- PARAMETERS:
+--        pCategoryID: Category ID which we want to update(edit)
+--        pCategoryData: Updating category data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productCategoryUpdate pCategoryID, pCategoryData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCategoryData) to Json
+   put  ArrayToJSON(pCategoryData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/categories/" into tAPICall
+   put pCategoryID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productCategoryUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productCategoryDelete
+-- DESCRIPTION:
+--       This API helps you delete a product category.
+-- PARAMETERS:
+--        pCategoryID: Category ID which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productCategoryDelete pCategoryID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/categories/" into tAPICall
+   put pCategoryID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productCategoryDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productShippingClassCreate
+-- DESCRIPTION:
+--       This API helps you to create a new product shipping class.
+-- PARAMETERS:
+--       pShippingData: Creating shipping class data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productShippingClassCreate pShippingData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCategoryData) to Json
+   put  ArrayToJSON(pShippingData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/shipping_classes" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productShippingClassCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productShippingClassGet
+-- DESCRIPTION:
+--       This API lets you retrieve a product shipping class by ID
+-- PARAMETERS:
+--       pShippingClassID: Shipping class id which we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productShippingClassGet pShippingClassID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/shipping_classes/" into tAPICall
+   put pClassID & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productShippingClassGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productShippingClassListGet
+-- DESCRIPTION:
+--       This API lets you retrieve all product shipping classes.
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productShippingClassListGet
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/shipping_classes" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productShippingClassListGet
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productShippingClassUpdate
+-- DESCRIPTION:
+--       This API lets you make changes to a product shipping class.
+-- PARAMETERS:
+--       pShipClassID: Shipping class id which we want to update(edit)
+--       pShipClassData: Updating data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productShippingClassUpdate pShipClassID, pShipClassData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCategoryData) to Json
+   put  ArrayToJSON(pShipClassData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/shipping_classes/" into tAPICall
+   put pShipClassID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productShippingClassUpdate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productShippingClassDelete
+-- DESCRIPTION:
+--       This API helps you delete a product shipping class.
+-- PARAMETERS:
+--       pShipClassID: Shipping class id which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productShippingClassDelete pClassID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/shipping_classes/" into tAPICall
+   put pClassID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productShippingClassDelete
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productTagCreate
+-- DESCRIPTION:
+--       This API helps you to create a new product tag.
+-- PARAMETERS:
+--       pTagData: Creating tag data
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productTagCreate pTagData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCategoryData) to Json
+   put  ArrayToJSON(pTagData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/tags" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productTagCreate
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productGetTagByID
+-- DESCRIPTION:
+--       This API helps you to get product's tag by id
+-- PARAMETERS:
+--       pTagID: Tag id which we want to get
+-- CHANGES:
+--       31/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productGetTagByID pTagID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/tags/" into tAPICall
+   put pTagID & "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productGetTagByID
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productGetTagsList
+-- DESCRIPTION:
+--       This API lets you retrieve a product tag by ID.
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productGetTagsList
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "products/tags" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productGetTagsList
+
+
+-------------------------------------------------------------------------------------------------------------
+-- productTagUpdate
+-- DESCRIPTION:
+--       This API helps you to create a new product tag..
+-- PARAMETERS:
+--       pTagID: Tag id which wa want to update
+--       pTagData: Updating data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productTagUpdate pTagID, pTagData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCategoryData) to Json
+   put  ArrayToJSON(pTagData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/tags/" into tAPICall
+   put pTagID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productTagUpdate
+
+
+------------------------------------------------------------------------------------------------------------
+-- productTagDelete
+-- DESCRIPTION:
+--       This API helps you to delete product tag by id
+-- PARAMETERS:
+--       pTagID: Tag id which wa want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function productTagDelete pTagID
+   libURLSetSSLVerification false
+   
+   --Convert Array(pCategoryData) to Json
+   put  ArrayToJSON(pTagData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "products/tags/" into tAPICall
+   put pTagID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end productTagDelete
+
+
+------------------------------------------------------------------------------------------------------------
+-- reportsSearch
+-- DESCRIPTION:
+--       This API lets you retrieve and view a simple list of available reports.
+-- PARAMETERS:
+-- PARAMETERS:
+--       pParameters: Pass array with all filters values
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+--       14/04/2016 Narek: Changed function name and add parameter which contains filter values for filtering
+--                                            check all filters and when we have one add after api call
+-------------------------------------------------------------------------------------------------------------
+function reportsSearch pParameters
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   -- The supported periods are: week, month, last_month, year
+   if pParameters["period"] is not empty then
+      put pParameters["period"] into tPeriod
+      
+      put "&filter[period]=" & tPeriod after tFilters
+   end if
+   
+   
+   -- The date format need to be: YYYY-MM-AA
+   -- Return sales for a specific start date.
+   if pParameters["date_min"] is not empty then
+      put pParameters["date_min"] into tReportsMinDate
+      
+      put "&filter[date_min]=" & tReportsMinDate after tFilters
+   end if
+   
+   -- Return sales for a specific end date
+   if pParameters["date_max"] is not empty then
+      put pParameters["date_max"] into tReportsMaxDate
+      
+      put "&filter[date_max]=" & tReportsMaxDate after tFilters
+   end if
+   
+   
+   put "reports" into tAPICall
+   put "?" & sWCAuthParams & tFilters after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end reportsSearch
+
+
+------------------------------------------------------------------------------------------------------------
+-- reportsSales
+-- DESCRIPTION:
+--       This API lets you retrieve and view a list of sales report.
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function reportsSales
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   put "reports/sales" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end reportsSales
+
+
+------------------------------------------------------------------------------------------------------------
+-- reportsTopSellers
+-- DESCRIPTION:
+--       This API lets you retrieve and view a list of top sellers report.
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function reportsTopSellers
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   put "reports/sales/top_sellers?period=last_month" into tAPICall
+   put "&" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
+end reportsTopSellers
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxRateCreate
+-- DESCRIPTION:
+--       This API helps you to create a new tax rate.
+-- PARAMETERS:
+--       pTaxesData: New creating tax rate data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxRateCreate pTaxesData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pTaxesData) to Json
+   put  ArrayToJSON(pTaxesData) into tJsonData
+   put "taxes" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   post tJsonData to URL(sPostURL & tAPICall)
+   
+   put JSONToArray(it) into tArray
+   return tArray
+end taxRateCreate
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxRateGet
+-- DESCRIPTION:
+--       This API helps you to get tax rate by id.
+-- PARAMETERS:
+--       pTaxID: Tax id which we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxRateGetByID pTaxID
+   
+   libURLSetSSLVerification false
+   
+   put "taxes/" into tAPICall
+   put pTaxID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tResult
+   put JSONToArray(tResult) into tResult
+   return tResult
+end taxRateGetByID
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxRatesListGet
+-- DESCRIPTION:
+--       This API helps you to view all the tax rates.
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxRatesListGet
+   libURLSetSSLVerification false
+   
+   put "taxes" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   put it into tResult
+   
+   put JSONToArray(tResult) into tResult
+   return tResult
+end taxRatesListGet
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxRateUpdate
+-- DESCRIPTION:
+--       This API helps you to update a tax rate.
+-- PARAMETERS:
+--       pTaxID: Tax rate id which we want to update
+--       pTaxData: Updating data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxRateUpdate pTaxID, pTaxData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pTaxesData) to Json
+   put  ArrayToJSON(pTaxData) into tJsonData
+   put "taxes/" into tAPICall
+   put pTaxID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   post tJsonData to URL(sPostURL & tAPICall)
+   
+   put JSONToArray(it) into tArray
+   return tArray
+end taxRateUpdate
+
+
+------------------------------------------------------------------------------------------------------------
+-- ratesCreateOrUpdate
+-- DESCRIPTION:
+--       This API helps you to bulk create/update multiple tax rates.
+--       To update is necessary to send objects containing IDs and to create new not just send the ID.
+-- PARAMETERS:
+--       pTaxRatesData: Updating data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxRateCreateOrUpdate pTaxRatesData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pTaxesData) to Json
+   put  ArrayToJSON(pTaxRatesData) into tJsonData
+   put "taxes/bulk" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   post tJsonData to URL(sPostURL & tAPICall)
+   return tJsonData
+end taxRateCreateOrUpdate
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxRateDelete
+-- DESCRIPTION:
+--       This API helps you delete a tax rate.
+-- PARAMETERS:
+--       pTaxID: Tax rate id which we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxRateDelete pTaxID
+   
+   libURLSetSSLVerification false
+   
+   put "taxes/" into tAPICall
+   put pTaxID & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+   
+   return tJsonData
+end taxRateDelete
+
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxClassCreate
+-- DESCRIPTION:
+--       This API helps you to create a new tax class.
+-- PARAMETERS:
+--       pTaxeClassData: New creating tax class data (array)
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxClassCreate pTaxeClassData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pTaxesData) to Json
+   put  ArrayToJSON(pTaxeClassData) into tJsonData
+   put "taxes/classes" into tAPICall 
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   post tJsonData to URL(sPostURL & tAPICall)
+   
+   put JSONToArray(it) into tArray
+   return tArray
+end taxClassCreate
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxClassesListGet
+-- DESCRIPTION:
+--       This API helps you to view all the tax classes.
+-- PARAMETERS:
+--       none:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxClassesListGet
+   libURLSetSSLVerification false
+   
+   put "taxes/classes" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then
+      return 0
+   else 
+      return tResults
+   end if
+end taxClassesListGet
+
+
+------------------------------------------------------------------------------------------------------------
+-- taxClassDelete
+-- DESCRIPTION:
+--       This API helps you delete a tax class.
+-- PARAMETERS:
+--       pTaxSlug:
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function taxClassDelete pTaxSlug
+   libURLSetSSLVerification false
+   
+   put "taxes/classes" into tAPICall
+   put pTaxSlug & "?" & sWCAuthParams after tAPICall
+   
+   -- Create the URL used to call the REST service
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then
+      return 0
+   else 
+      return tResults
+   end if
+end taxClassDelete
+
+
+
+
+##################################################
+# What are Webhooks?
+#
+#      https://woothemes.github.io/woocommerce-rest-api-docs/#webhooks
+#      https://www.youtube.com/watch?v=Y8ilkx8otAc
+#      https://en.wikipedia.org/wiki/Webhook
+#
+# A Webhook is essentially an event notification sent to a URL of your choosing. 
+# Users can configure them to cause events on one site to invoke behaviour on another.
+# Webhooks are therefore very useful for integrating with third party services and other external API that support them.
+#
+##################################################
+
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhookCreate
+-- DESCRIPTION:
+--       This API helps you to create a new webhook.
+-- PARAMETERS:
+--       pWebhookData: New creating webhook data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function webhookCreate pWebhookData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert webhooks data array to Json
+   put  ArrayToJSON(pWebhookData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "webhooks" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end webhookCreate
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhookGet
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific webhook.
+-- PARAMETERS:
+--       pWebhookID: Webhook id which we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function webhookGet pWebhookID
+   
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "webhooks/" into tAPICall
+   put pWebhookID &  "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end webhookGet
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhooksSearch
+-- DESCRIPTION:
+--       This API lets you get all webhooks
+-- PARAMETERS:
+--       pParameters: Pass array with all filters values
+-- CHANGES:
+--       29/03/2016 Narek: Created function
+--       12/04/2016 Narek: Changed function namq and add parameter which contains filter values for filtering
+--                                            check all filters and when we have one add after api call
+-------------------------------------------------------------------------------------------------------------
+function webhooksSearch pParameters
+   -- LiveCode doesn't know how the handle the certs on WP servers
+   libURLSetSSLVerification false
+   
+   
+   -- NOTE:
+   --      That dates format should be: YYYY-MM-DDTHH:MM:SSZ
+   
+   -- Given a date, only customers created after the provided date will be returned
+   if pParameters["created_at_min"] is not empty then
+      put pParameters["created_at_min"] into tCreatedAtMin
+      
+      put "&filter[created_at_min]=" & tCreatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers created before the provided date will be returned
+   if pParameters["created_at_max"] is not empty then
+      put pParameters["created_at_max"] into tCreatedAtMax
+      
+      put "&filter[created_at_max]=" & tCreatedAtMax after tFilters
+   end if
+   
+   -- Given a date, only customers updated after the provided date will be returned
+   if pParameters["updated_at_min"] is not empty then
+      put pParameters["updated_at_min"] into tUpdatedAtMin
+      
+      put "&filter[updated_at_min]=" & tUpdatedAtMin after tFilters
+   end if
+   
+   -- Given a date, only customers updated before the provided date will be returned
+   if pParameters["updated_at_max"] is not empty then
+      put pParameters["updated_at_max"] into tUpdatedAtMax
+      
+      put "&filter[updated_at_max]=" & tUpdatedAtMax after tFilters
+   end if
+   
+   -- Performs a keyword search and returns customers that match
+   if pParameters["keyword"] is not empty then
+      put pParameters["updated_at_max"] into tSearchKeyword
+      
+      put "&filter[q]=" & tSearchKeyword after tFilters
+   end if
+   
+   -- Performs a keyword search and returns customers that match
+   if pParameters["keyword"] is not empty then
+      put pParameters["updated_at_max"] into tSearchKeyword
+      
+      put "&filter[q]=" & tSearchKeyword after tFilters
+   end if
+   
+   
+   -- Create the URL used to call the REST service
+   put "webhooks" into tAPICall
+   put "?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end webhooksSearch
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhookUpdate
+-- DESCRIPTION:
+--       This API helps you to update a webhook. by id
+-- PARAMETERS:
+--       pWebhookID: Which webhook we want to update(edit)
+--       pWebhookData: Updating data
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function webhookUpdate pWebhookID, pWebhookData
+   -- Setting the http headers
+   put "Content-Type: application/json" & cr after tHeader
+   set the httpheaders to tHeader
+   libURLSetSSLVerification false
+   
+   --Convert Array(pWebhookData) to Json
+   put  ArrayToJSON(pWebhookData) into tJson
+   
+   -- Create the URL used to call the REST service
+   put "webhooks/" into tAPICall
+   put pWebhookID & "?" & sWCAuthParams after tAPICall
+   post tJson to URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end webhookUpdate
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhookDelete
+-- DESCRIPTION:
+--       This API helps you delete a webhook by id
+-- PARAMETERS:
+--       pWebhookID: Which webhook we want to delete
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function webhookDelete pWebhookID
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "webhooks/" into tAPICall
+   put pWebhookID & "?" & sWCAuthParams after tAPICall
+   delete URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end webhookDelete
+
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhooksDeliveryGet
+-- DESCRIPTION:
+--       This API lets you retrieve and view a specific webhook delivery.
+-- PARAMETERS:
+--       pWebhooksID: Webhook id whish delivery we want to get
+--       pDeliveryID: Delivery id to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function webhooksDeliveryGet pWebhooksID, pDeliveryID
+   -- LiveCode doesn't know how the handle the certs on WP servers
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "webhooks/" into tAPICall
+   put pWebhooksID & "/deliveries/" & pDeliveryID &"?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   
+   return tResults
+end webhooksDeliveryGet
+
+
+------------------------------------------------------------------------------------------------------------
+-- webhooksDeliveryListGet
+-- DESCRIPTION:
+--       This API lets you retrieve and view all webhook's deliveries.
+-- PARAMETERS:
+--       pWebhooksID: Webhook id which deliveries we want to get
+-- CHANGES:
+--       30/03/2016 Narek: Created function
+-------------------------------------------------------------------------------------------------------------
+function webhooksDeliveryListGet pWebhooksID
+   
+   -- LiveCode doesn't know how the handle the certs on WP servers
+   libURLSetSSLVerification false
+   
+   -- Create the URL used to call the REST service
+   put "webhooks/" into tAPICall
+   put pWebhooksID & "/deliveries/"  &"?" & sWCAuthParams after tAPICall
+   get URL(sPostURL & tAPICall)
+   
+   put it into tResults
+   
+   put JSONToArray(tResults) into tResults
+   if tResults is empty then   
+      return 0
+   end if
+   return tResults
+end webhooksDeliveryListGet
+
+
+private function ArrayToJSON pArray,pForceRootType,pPretty
+   repeat for each key tKey in pArray
+      if pArray[tKey] is an array then
+         put "}"&ArrayToJSON(pArray[tKey]) into pArray[tKey]
+      end if
+   end repeat
+   return(mergJSONEncode("pArray",pForceRootType,pPretty))
+end ArrayToJSON
+
+private function JSONToArray pJSON
+local tArray,tKeys
+repeat for each line tKey in mergJSONDecode(pJSON,"tArray")
+   put JSONToArray(tArray[tKey]) into tArray[tKey]
+end repeat
+return tArray
+end JSONToArray
