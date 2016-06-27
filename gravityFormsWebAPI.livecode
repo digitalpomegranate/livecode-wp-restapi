@@ -1,0 +1,1197 @@
+﻿script "gravityFormsWebAPI"
+##################################################################
+#                                          GRAVITY FORMS WEB API v0.0.1
+# The Web API allows developers to create, read, update and delete forms, 
+#   entries and results over HTTP loosely following REST-style principles.
+#
+# Digital Pomegranate LLC, 2016 
+###################################################################
+----------------------------------------------------------------------------------------------
+local sGFormsDetails
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFInit
+--DESCRIPTION
+--      Init Gravity Forms lybrary      
+--PARAMETERS
+--      pDomain: Your domain 
+--      pAPIKey: The public API key defined on the settings page
+--      pPrivateKey: The private API key defined on the settings page
+--CHANGES
+--      5/31/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFInit pDomain, pAPIKey, pPrivateKey 
+   -- Check all required parameters
+   if pDomain is empty or pAPIKey is empty or pPrivateKey is empty then return false
+   
+   -- Correct the domain adress if it's not correct
+   if the last char of pDomain is not slash then put slash after pDomain
+   
+   put pDomain into sGFormsDetails["domain"]
+   put pAPIKey into sGFormsDetails["apikey"]
+   put pPrivateKey into sGFormsDetails["privatekey"]
+   
+   -- Check 
+   put the stacksInUse into tStacksInUse
+   
+   if "libHash-Hmac" is not among the lines of tStacksInUse then
+      answer "libHash-Hmac library required"
+      return false
+   end if
+   
+   -- All is OK
+   return true
+end GFInit
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFFormsGet
+--DESCRIPTION
+--      Returns a list of all ACTIVE forms along with its entry count.
+--PARAMETERS
+-- 
+--CHANGES
+--      5/31/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFFormsGet
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "GET" into tMethod
+   put "forms" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing forms in the page
+   return tResultArray
+end GFFormsGet
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFFormsGetByID
+--DESCRIPTION
+--      Returns a Form object. Multiple forms may be requested by separating the IDs by semicolons.
+--PARAMETERS
+--      pIDList: form id or array with IDs of forms to get
+--CHANGES
+--      5/31/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFFormsGetByID pIDList
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- The form ID is required
+   if pIDList is empty then return empty
+   
+   -- Read and create a list of form IDs
+   if pIDList is an array then
+      repeat for each key tKey in pIDList
+         put pIDList[tKey] & ";" after tFormID
+      end repeat
+      delete last char of tFormID
+   else
+      -- Only one ID is passed
+      put pIDList into tFormID
+   end if
+   
+   -- Set the method, rout, expires
+   put "GET" into tMethod
+   put "forms/" & tFormID into tRoute
+   put the millisecs into tExpires
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put  jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing forms in the page
+   return tResultArray
+end GFFormsGetByID
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFFormsCreate
+--DESCRIPTION
+--      Creates new forms using the given form objects
+--PARAMETERS
+--      pFormArray: An array of valid form objects to create. If the ID of the form is 
+--                               included in the form object, then it will be ignored.
+--CHANGES
+--      6/02/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFFormsCreate pFormArray
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "POST" into tMethod
+   put "forms" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Convert to json
+   put arrayToJson(pFormArray) into tFormJson
+   
+   -- Post the form json
+   POST tFormJson to URL tURL
+   
+   -- Get the response
+   put it into tResponse
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResult
+   end if
+   
+   -- Return the result
+   return tResult
+end GFFormsCreate
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFFormsUpdate
+--DESCRIPTION
+--      Updates the form with a given ID, or if an ID is not provided in the route, 
+--       updates the form(s) using the provided id(s) in the form array
+--PARAMETERS
+--      pFormArray: A JSON string representation of the form object(s). If the ID of the 
+--                              form is included in the form object then it will be overwritten with 
+--                              the form ID supplied in the request URI (if there is one).
+--CHANGES
+--      6/02/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFFormsUpdate pFormArray
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "PUT" into tMethod
+   put "forms" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Convert to json
+   put arrayToJson(pFormArray) into tFormJson
+   
+   -- Post the form json
+   PUT tFormJson into URL tURL
+   
+   if the result is empty then -- OK
+      put "Forms updated successfully" into tResult["response"]
+      put 200 into tResult["status"]
+   else -- ERROR
+      put the result into tResult["response"]
+      put "error code" into tResult["status"]
+   end if
+ 
+   return tResult
+end GFFormsUpdate
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFFormsDelete
+--DESCRIPTION
+--      Deletes the forms with the given IDs
+--PARAMETERS
+--      pIDList: form id or array with IDs of forms to delete
+--CHANGES
+--      5/31/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFFormsDelete pIDList
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- The form ID is required
+   if pIDList is empty then return empty
+   
+   -- Read and create a list of form IDs
+   if pIDList is an array then
+      repeat for each key tKey in pIDList
+         put pIDList[tKey] & ";" after tFormID
+      end repeat
+      delete last char of tFormID
+   else
+      -- Only on ID is passed
+      put pIDList into tFormID
+   end if
+   
+   -- Set the method, rout, expires
+   put "DELETE" into tMethod
+   put "forms/" & tFormID into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Delete Form
+   DELETE URL tURL
+   
+   if the result is empty then -- OK
+      put "Forms deleted successfully" into tResultArray["response"]
+      put 200 into tResultArray["status"]
+   else -- ERROR
+      put the result into tResultArray["response"]
+      put "error code" into tResultArray["status"]
+   end if
+   
+   return tResultArray
+end GFFormsDelete
+----------------------------------------------------------------------------------------------
+
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFSubmit
+--DESCRIPTION
+--      Use this function to send input values through the complete form submission process.
+--PARAMETERS
+--      pFormID: 
+--      pInputValues: Array containing each of the name-value pairs.
+--CHANGES
+--      6/09/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFSubmit pFormID, pInputValues
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Format form submition values
+   put pInputValues into tInputValues["input_values"]
+   put arrayToJson(tInputValues) into tInputJson
+   
+   -- Set the route
+   put "forms/" & pFormID & "/submissions"  into tRoute
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL  
+   
+   -- Submit Form
+   POST tInputJson to tURL
+   
+   -- Get the response
+   put it into tResponse
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResult
+   end if
+   
+   return tResult
+end GFSubmit
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesGet
+--DESCRIPTION
+--      Returns the latest entries across all forms.
+--PARAMETERS
+--      pPaging: Controls the number of entries retrieved per page and allows paging to be implemented
+--               pPaging["page_size"]: The number of items to be returned. By default = 10
+--               pPaging["offset"]:  Using the page offset comes into play when displaying entries with the ability
+--                                               for the user to go to the next or previous set of results. This is set to 0 by default.
+--      pSorting: Retrieved entries are automatically sorted by entry id, descending.
+--               pSorting["direction"]: The possible values for the sorting direction are - ASC or DESC
+--               pSorting["key"]: To specify a sorting key, field ids or an entry meta key may be used.
+--                                               The entry meta keys which are available for sorting are as follows:
+--                                               id | form_id | post_id | date_created | is_starred | is_read | ip | source_url | user_agent |
+--                                               created_by | status | currency
+--                                               For entries with payment information:
+--                                               payment_status | payment_date | payment_amount | payment_method | transaction_id |
+--                                               transaction_type | is_fulfilled
+--      pSearch: Allows entries to be filtered by search criteria and field filters. The entry meta keys which are available 
+--                        to use as search criteria are as follows: | start_date | end_date | status |
+--CHANGES
+--      06/09/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesGet pPaging, pSorting, pSearch
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "GET" into tMethod
+   put "entries" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   ---------------------------------------------------------------------- 
+   -- Paging 
+   ----------------------------------------------------------------------
+   if pPaging["page_size"] is not empty then 
+      put "&paging[page_size]=" & pPaging["page_size"] after tURL
+   end if
+   
+   if pPaging["offset"] is not empty then 
+      put "&paging[offset]=" & pPaging["offset"] after tURL
+   end if
+   
+   
+   ----------------------------------------------------------------------
+   -- Sorting
+   ----------------------------------------------------------------------
+   if pSorting["direction"] is not empty then 
+      put "&sorting[direction]=" & pSorting["direction"] after tURL
+   end if
+   
+   if pSorting["key"] is not empty then 
+      put "&sorting[key]=" & pSorting["key"] after tURL
+   end if
+   
+   ----------------------------------------------------------------------
+   -- Search Criterias 
+   ----------------------------------------------------------------------
+   if pSearch["start_date"] is not empty then 
+      put "&search[start_date]=" & pSearch["start_date"] after tURL
+   end if
+   
+   if pSearch["end_date"] is not empty then 
+      put "&search[end_date]=" & pSearch["end_date"] after tURL
+   end if
+   
+   if pSorting["status"] is not empty then 
+      put "&search[status]=" & pSearch["status"] after tURL
+   end if   
+   ----------------------------------------------------------------------
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing entries
+   return tResultArray   
+end GFEntriesGet
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesGetByID
+--DESCRIPTION
+--      Returns a Form object. Multiple forms may be requested by separating the IDs by semicolons.
+--PARAMETERS
+--      pIDList: form id or array with IDs of forms to get
+--CHANGES
+--      5/31/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesGetByID pEntrieID
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- The form ID is required
+   if pEntrieID is empty then return empty
+   
+   -- Set the method, rout, expires
+   put "GET" into tMethod
+   put "entries/" & pEntrieID into tRoute
+   put the millisecs into tExpires
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put  jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing forms in the page
+   return tResultArray
+end GFEntriesGetByID
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesGetByFormID
+--DESCRIPTION
+--      Returns the latest entries for the given Form ID.
+--PARAMETERS
+--      pFormID: The form id
+--      pPaging: Controls the number of entries retrieved per page and allows paging to be implemented
+--               pPaging["page_size"]: The number of items to be returned. By default = 10
+--               pPaging["offset"]:  Using the page offset comes into play when displaying entries with the ability
+--                                               for the user to go to the next or previous set of results. This is set to 0 by default.
+--      pSorting: Retrieved entries are automatically sorted by entry id, descending.
+--               pSorting["direction"]: The possible values for the sorting direction are - ASC or DESC
+--               pSorting["key"]: To specify a sorting key, field ids or an entry meta key may be used.
+--                                               The entry meta keys which are available for sorting are as follows:
+--                                               id | form_id | post_id | date_created | is_starred | is_read | ip | source_url | user_agent |
+--                                               created_by | status | currency
+--                                               For entries with payment information:
+--                                               payment_status | payment_date | payment_amount | payment_method | transaction_id |
+--                                               transaction_type | is_fulfilled
+--      pSearch: Allows entries to be filtered by search criteria and field filters. The entry meta keys which are available 
+--                        to use as search criteria are as follows: | start_date | end_date | status |
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesGetByFormID pFormID, pPaging, pSorting, pSearch
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "GET" into tMethod
+   put "forms/" & pFormID & "/entries" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   ---------------------------------------------------------------------- 
+   -- Paging 
+   ----------------------------------------------------------------------
+   if pPaging["page_size"] is not empty then 
+      put "&paging[page_size]=" & pPaging["page_size"] after tURL
+   end if
+   
+   if pPaging["offset"] is not empty then 
+      put "&paging[offset]=" & pPaging["offset"] after tURL
+   end if
+   
+   
+   ----------------------------------------------------------------------
+   -- Sorting
+   ----------------------------------------------------------------------
+   if pSorting["direction"] is not empty then 
+      put "&sorting[direction]=" & pSorting["direction"] after tURL
+   end if
+   
+   if pSorting["key"] is not empty then 
+      put "&sorting[key]=" & pSorting["key"] after tURL
+   end if
+   
+   ----------------------------------------------------------------------
+   -- Search Criterias 
+   ----------------------------------------------------------------------
+   if pSearch["start_date"] is not empty then 
+      put "&search[start_date]=" & pSearch["start_date"] after tURL
+   end if
+   
+   if pSearch["end_date"] is not empty then 
+      put "&search[end_date]=" & pSearch["end_date"] after tURL
+   end if
+   
+   if pSorting["status"] is not empty then 
+      put "&search[status]=" & pSearch["status"] after tURL
+   end if   
+   ----------------------------------------------------------------------
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing entries
+   return tResultArray   
+end GFEntriesGetByFormID
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesPropsGet
+--DESCRIPTION
+--      Returns the specified entry property/properties for the specified entry/entries.
+--PARAMETERS
+--      pFormID: The form id
+--      pEntrieID: The Entrie id
+--      pPaging: Controls the number of entries retrieved per page and allows paging to be implemented
+--               pPaging["page_size"]: The number of items to be returned. By default = 10
+--               pPaging["offset"]:  Using the page offset comes into play when displaying entries with the ability
+--                                               for the user to go to the next or previous set of results. This is set to 0 by default.
+--      pSorting: Retrieved entries are automatically sorted by entry id, descending.
+--               pSorting["direction"]: The possible values for the sorting direction are - ASC or DESC
+--               pSorting["key"]: To specify a sorting key, field ids or an entry meta key may be used.
+--                                               The entry meta keys which are available for sorting are as follows:
+--                                               id | form_id | post_id | date_created | is_starred | is_read | ip | source_url | user_agent |
+--                                               created_by | status | currency
+--                                               For entries with payment information:
+--                                               payment_status | payment_date | payment_amount | payment_method | transaction_id |
+--                                               transaction_type | is_fulfilled
+--      pSearch: Allows entries to be filtered by search criteria and field filters. The entry meta keys which are available 
+--                        to use as search criteria are as follows: | start_date | end_date | status |
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesPropsGet, pEntrieIDs, pPropsArray, pPaging, pSorting, pSearch
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Properties required
+   if pPropsArray is empty then return empty
+   
+   ----------------------------------------------------------------------
+   -- Read and create a list of entrie IDs
+   ----------------------------------------------------------------------
+   if pEntrieIDs is an array then
+      repeat for each key tKey in pEntrieIDs
+         put pEntrieIDs[tKey] & ";" after tEntrieIDs
+      end repeat
+      delete last char of tEntrieIDs
+   else
+      -- Only one ID is passed
+      put pEntrieIDs into tEntrieIDs
+   end if
+  ----------------------------------------------------------------------
+   
+  ----------------------------------------------------------------------
+   -- Read and create a list of Field ID or entry meta keys
+   ----------------------------------------------------------------------
+   if pPropsArray is an array then
+      repeat for each key tKey in pPropsArray
+         put pPropsArray[tKey] & ";" after tProps
+      end repeat
+   else
+      -- Only one ID is passed
+      put pPropsArray & ";" into tProps
+   end if
+ ----------------------------------------------------------------------
+   
+   -- Set the method, rout, expires
+   put "GET" into tMethod
+   put "entries/" & tEntrieIDs & "/fields/" & tProps into tRoute
+   put the millisecs into tExpires
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   ---------------------------------------------------------------------- 
+   -- Paging 
+   ----------------------------------------------------------------------
+   if pPaging["page_size"] is not empty then 
+      put "&paging[page_size]=" & pPaging["page_size"] after tURL
+   end if
+   
+   if pPaging["offset"] is not empty then 
+      put "&paging[offset]=" & pPaging["offset"] after tURL
+   end if
+   
+   
+   ----------------------------------------------------------------------
+   -- Sorting
+   ----------------------------------------------------------------------
+   if pSorting["direction"] is not empty then 
+      put "&sorting[direction]=" & pSorting["direction"] after tURL
+   end if
+   
+   if pSorting["key"] is not empty then 
+      put "&sorting[key]=" & pSorting["key"] after tURL
+   end if
+   
+   ----------------------------------------------------------------------
+   -- Search Criterias 
+   ----------------------------------------------------------------------
+   if pSearch["start_date"] is not empty then 
+      put "&search[start_date]=" & pSearch["start_date"] after tURL
+   end if
+   
+   if pSearch["end_date"] is not empty then 
+      put "&search[end_date]=" & pSearch["end_date"] after tURL
+   end if
+   
+   if pSorting["status"] is not empty then 
+      put "&search[status]=" & pSearch["status"] after tURL
+   end if   
+   ----------------------------------------------------------------------
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing properties
+   return tResultArray   
+end GFEntriesPropsGet
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesCreate
+--DESCRIPTION
+--      Creates/adds entries
+--PARAMETERS
+--      pEntries: An array containing a collection of entries that will be added
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesCreate pEntries
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "POST" into tMethod
+   put "entries" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Convert to json
+   put arrayToJson(pEntries) into tEntriesJson
+   
+   -- Post the form json
+   POST tEntriesJson to URL tURL
+   
+   -- Get the response
+   put it into tResponse
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResult
+   end if
+   
+   -- Return the result
+   return tResult
+end GFEntriesCreate
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesCreateByFormID
+--DESCRIPTION
+--      Creates/adds entries for the specified Form ID
+--PARAMETERS
+--      pFormID: The form id
+--      pEntries: An array containing a collection of entries that will be added
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesCreateByFormID pFormID, pEntries
+      -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "POST" into tMethod
+   put "forms/" & pFormID & "/entries" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Convert to json
+   put arrayToJson(pEntries) into tEntriesJson
+   
+   -- Post the form json
+   POST tEntriesJson to URL tURL
+   
+   -- Get the response
+   put it into tResponse
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put jsonToArray(tResponse) into tResult
+   end if
+   
+   -- Return the result
+   return tResult
+end GFEntriesCreateByFormID
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesUpdateByID
+--DESCRIPTION
+--      Updates the entry with the given ID
+--PARAMETERS
+--      pEntryID: The entrie id
+--      pEntryData: An array with the entry
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesUpdateByID pEntryID, pEntryData
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "PUT" into tMethod
+   put "entries/" & pEntryID into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Convert to json
+   put arrayToJson(pEntryData) into tEntryJson
+   
+   -- Post the form json
+   PUT tEntryJson into URL tURL
+   
+   if the result is empty then -- OK
+      put "Entry updated successfully" into tResult["response"]
+      put 200 into tResult["status"]
+   else -- ERROR
+      put the result into tResult["response"]
+      put "error code" into tResult["status"]
+   end if
+ 
+   return tResult
+end GFEntriesUpdateByID
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesUpdate
+--DESCRIPTION
+--      Updates the entries sent in the body
+--PARAMETERS
+--      pEntries: An array containing a collection of entries that will be added
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesUpdate pEntries
+      -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, route, expires
+   put "PUT" into tMethod
+   put "entries" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Convert to json
+   put arrayToJson(pEntries) into tEntriesJson
+   
+   -- Post the form json
+   PUT tEntriesJson into URL tURL
+   
+   if the result is empty then -- OK
+      put "Entry updated successfully" into tResult["response"]
+      put 200 into tResult["status"]
+   else -- ERROR
+      put the result into tResult["response"]
+      put "error code" into tResult["status"]
+   end if
+ 
+   return tResult
+end GFEntriesUpdate
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFEntriesDelete
+--DESCRIPTION
+--      Deletes the entry or entries with the specified ID or IDs. The deletion process 
+--       completely removes the entry; it will NOT be available in the Trash.
+--PARAMETERS
+--      pEntriesIDs: An array containing a collection of entry IDs
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFEntriesDelete pEntriesIDs
+     -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- The form ID is required
+   if pEntriesIDs is empty then return empty
+   
+   -- Read and create a list of entry IDs
+   if pEntriesIDs is an array then
+      repeat for each key tKey in pEntriesIDs
+         put pEntriesIDs[tKey] & ";" after tEntriesIDs
+      end repeat
+      delete last char of tEntriesIDs
+   else
+      -- Only on ID is passed
+      put pEntriesIDs into tEntriesIDs
+   end if
+   
+   -- Set the method, rout, expires
+   put "DELETE" into tMethod
+   put "entries/" & tEntriesIDs into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Delete Entry
+   DELETE URL tURL
+   
+   if the result is empty then -- OK
+      put "Entries deleted successfully" into tResultArray["response"]
+      put 200 into tResultArray["status"]
+   else -- ERROR
+      put the result into tResultArray["response"]
+      put "error code" into tResultArray["status"]
+   end if
+   
+   return tResultArray
+end GFEntriesDelete
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFResultsGet
+--DESCRIPTION
+--      Returns the aggregate results (entry counts) for each of the fields in the given form.
+--PARAMETERS
+--      pFormID: The form id
+--CHANGES
+--      6/10/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFResultsGet pFormID
+   -- Set the SSL verification to false
+   libURLSetSSLVerification false
+   
+   -- Set the method, rout, expires
+   put "GET" into tMethod
+   put "forms/" & pFormID & "/results" into tRoute
+   put the millisecs into tExpires
+   
+   -- Format a colon delimeted string 
+   put sGFormsDetails["apikey"] & colon & tMethod & colon & tRoute & colon & tExpires into tStringToSign
+   
+   -- Calculate Signatures
+   put GFCalculateSignatures(tStringToSign, sGFormsDetails["privatekey"]) into tSig
+   
+   -- Create URL 
+   put sGFormsDetails["domain"] into tURL
+   put "gravityformsapi/" after tURL 
+   put tRoute after tURL 
+   put "?api_key=" & sGFormsDetails["apikey"] after tURL 
+   put "&signature=" & tSig after tURL 
+   put "&expires=" & tExpires after tURL 
+   
+   -- Try to get response
+   repeat with tTry = 1 to 5
+      GET URL tURL
+      
+      -- If the response is not empty then exit repeat
+      if it is not empty then exit repeat
+   end repeat
+   
+   -- Response
+   put it into tResponse 
+   
+   -- Convert to livecode array
+   if tResponse is not empty then
+      put  jsonToArray(tResponse) into tResultArray
+   end if
+   
+   -- Return array containing forms in the page
+   return tResultArray
+end GFResultsGet
+----------------------------------------------------------------------------------------------
+
+
+
+
+----------------------------------------------------------------------------------------------
+-- GFCalculateSignatures
+--DESCRIPTION
+--      The function calculates signatures from given string
+--PARAMETERS
+--      pStringToSign: String to be calculated
+--      pPrivateKey: Secret key used for generating the hmacSha1 hash
+--CHANGES
+--      5/31/2016: Gurgen - created
+----------------------------------------------------------------------------------------------
+function GFCalculateSignatures pStringToSign, pPrivateKey
+   
+   put hmacSha1.b64(pStringToSign, pPrivateKey) into tHash
+   put URLEncode(tHash) into tSig
+   
+   return tSig
+end GFCalculateSignatures
+----------------------------------------------------------------------------------------------
+
+
+function ArrayToJSON pArray,pForceRootType,pPretty
+    repeat for each key tKey in pArray
+        if pArray[tKey] is an array then
+            put "}"&ArrayToJSON(pArray[tKey]) into pArray[tKey]
+        end if
+    end repeat
+    return(mergJSONEncode("pArray",pForceRootType,pPretty))
+end ArrayToJSON
+
+function JSONToArray pJSON
+   local tArray,tKeys
+   repeat for each line tKey in mergJSONDecode(pJSON,"tArray")
+      put JSONToArray(tArray[tKey]) into tArray[tKey]
+   end repeat
+   return tArray
+end JSONToArray
+
+
+
+
+
+
+
+
+
