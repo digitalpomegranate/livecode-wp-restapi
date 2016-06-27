@@ -10,6 +10,12 @@ local sTokenLastUpdateTime
 --       This function get WPAPI properties and check them if everything is good, returns "true"   
 -- PARAMETERS:
 --       pWPAPI: Array which is contains all properties which we need for rest functionality
+--                       put "CLIENT ID" into tWPAPI["clientid"]
+--                       put "CLIENT SECRET" into tWPAPI["secret"]
+--                       put "https://yourwebsite.com" into tWPAPI["endpoint"]
+--                       put "USERNAME" into tWPAPI["username"]
+--                       put "PASSWORD" into tWPAPI["password"]
+--                       put "https://yourwebsite.com/wp-json/wp/v2/" into tWPAPI["post_url"]
 -- CHANGES:
 --       22/04/2016 Narek: Created function
 -------------------------------------------------------------------------------------------------------------
@@ -88,7 +94,7 @@ function accessTokenGet
    put "password" into tUserInfo["grant_type"]
    
    -- Convert to Json for posting
-   put jsonFromArray(tUserInfo) into tUserInfoJson
+   put ArrayToJSON(tUserInfo) into tUserInfoJson
    
    -- Build the URL
    put sWPAPI["endpoint"] into tURL
@@ -110,7 +116,7 @@ function accessTokenGet
    put the seconds into sTokenLastUpdateTime
    
    -- Convert received json to array and get access token
-   put arrayFromJson(tResponse) into tResultArray
+   put JSONToArray(tResponse) into tResultArray
    
    return tResultArray
 end accessTokenGet
@@ -157,6 +163,8 @@ end accessTokenCheck
 --       30/03/2016 Gohar: Created function
 -------------------------------------------------------------------------------------------------------------
 function postsGetList pParameters
+   libURLSetSSLVerification false
+   
    -- Maximum number of items to be returned in result set. Default: 10
    if pParameters["per_page"] is not empty then
       put "&per_page=" & pParameters["per_page"] after tFilters
@@ -167,10 +175,11 @@ function postsGetList pParameters
       if pParameters["context"] is "edit" then
          accessTokenCheck
          
-         put "/?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "?access_token=" & sAccessToken["access_token"] into tAPICall
+         put "&context=" & pParameters["context"] after tFilters
+      else
          put "&context=" & pParameters["context"] after tFilters
       end if
-      put "&context=" & pParameters["context"] after tFilters
    end if
    
    -- Current page of the collection. Default: 1
@@ -213,15 +222,22 @@ function postsGetList pParameters
    -- Get post URL
    put sWPAPI["post_url"] into tPostURL
    
+   if tAPICall contains "?" then
+   else
+      put "?" into char 1 of tFilters
+   end if
+   
+   
    -- Get all posts list
    get URL(tPostURL & tAPICall & tFilters)
+   
    put it into tJsonData
    
    -- Converting postes data json to array for usability
-   put arrayFromJson(tJsonData) into tPagesList
+   put JSONToArray(tJsonData) into tPagesList
    
    -- Convert JSON to array
-   return tJsonData
+   return tPagesList
 end postsGetList
 
 
@@ -268,7 +284,9 @@ function postGetByID pPostId, pContext
    get URL(tPostURL & tAPICall) 
    
    put it into tJsonData
-   return tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
 end postGetByID
 
 
@@ -302,7 +320,7 @@ function postCreate pPostData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pPostData) into tPostJson
+   put ArrayToJSON(pPostData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "posts" into tAPICall
@@ -312,15 +330,15 @@ function postCreate pPostData
    
    -- Posting for creating the post
    post tPostJson to URL(tPostURL & tAPICall)
-   
-   -- Added by Chi
    put it into tResponse
    
-   if tResults is empty then   
+   put JSONToArray(tResponse) into tReponseArray
+   
+   if tReponseArray is empty then   
       return false
    end if
    
-   return tResponse
+   return tReponseArray
 end postCreate
 
 
@@ -393,7 +411,7 @@ function postEdit pPostID, pPostData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pPostData) into tPostJson
+   put ArrayToJSON(pPostData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "posts/" into tAPICall
@@ -405,6 +423,8 @@ function postEdit pPostID, pPostData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then 
       return 0
    end if
@@ -447,7 +467,7 @@ function postEditWithLang pPostID, pPostData
    get URL(tPostURL & tAPICall) 
    put it into tEditingPostJson
    
-   put arrayFromJson(tEditingPostJson) into tEditingPostArray
+   put JSONToArray(tEditingPostJson) into tEditingPostArray
    
    -- Get languages of post title
    put tEditingPostArray["title"]["raw"] into tTitleLangList
@@ -528,7 +548,7 @@ function postEditWithLang pPostID, pPostData
    end repeat
    
    -- Convert to json for posting
-   put jsonFromArray(tEditPostArray) into tPostJson 
+   put ArrayToJSON(tEditPostArray) into tPostJson 
    
    -- Build URL
    put "posts/" & pPostID into tAPICall
@@ -576,7 +596,7 @@ function postRevisionsGetList pPostID
    put it into tJsonData
    
    -- Converting postes data json to array for usability
-   put arrayFromJson(tJsonData) into tPagesList
+   put JSONToArray(tJsonData) into tPagesList
    
    -- Convert JSON to array
    return tPagesList
@@ -618,7 +638,9 @@ function postRevisionGetByID pPostID, pRevisionID
    get URL(tPostURL & tAPICall)
    put it into tJsonData
    
-   return tJsonData
+   put JSONToArray(tJsonData) into tArray
+   
+   return tArray
 end postRevisionGetByID
 
 
@@ -696,7 +718,7 @@ function postMetaCreate pPostID, pMetaData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pMetaData) into tPostJson
+   put ArrayToJSON(pMetaData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "posts/" & pPostID & "/meta" into tAPICall
@@ -792,7 +814,7 @@ function postMetaEdit pPostID, pMetaID, pMetaData
    
    put sWPAPI["post_url"] into tPostURL
    
-   put jsonFromArray(pMetaData) into tPostJson
+   put ArrayToJSON(pMetaData) into tPostJson
    
    post tPostJson to URL(tPostURL & tAPICall)
    put it into tResults
@@ -870,7 +892,7 @@ function taxonomiesGetList
    get URL(tPostURL & tAPICall)
    put it into tJsonData
    
-   put arrayFromJson(tJsonData) into tTaxonomiesList
+   put JSONToArray(tJsonData) into tTaxonomiesList
    
    return tTaxonomiesList
 end taxonomiesGetList
@@ -897,7 +919,9 @@ function taxonomyGetByID pTaxonomyID
    get URL(tPostURL & tAPICall)
    put it into tTaxJsonData
    
-   return tTaxJsonData
+   put JSONToArray(tTaxJsonData) into tTaxData
+   
+   return tTaxData
 end taxonomyGetByID
 
 
@@ -935,7 +959,7 @@ function userCreate pUserData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pUserData) into tPostJson
+   put ArrayToJSON(pUserData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "users" into tAPICall
@@ -946,6 +970,8 @@ function userCreate pUserData
    -- Posting for creating the post
    post tPostJson to URL(tPostURL & tAPICall)
    put it into tResults
+   
+   put JSONToArray(tResults) into tResults
    
    if tResults is empty then   
       return false
@@ -981,7 +1007,7 @@ function userEdit pUserID pUserData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pUserData) into tPostJson
+   put ArrayToJSON(pUserData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "users/" & pUserID into tAPICall
@@ -993,6 +1019,8 @@ function userEdit pUserID pUserData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then 
       return 0
    end if
@@ -1086,7 +1114,7 @@ function usersGetList pUsersFilter
    get URL(tPostURL & tAPICall)
    put it into tUsersListJson
    
-   return arrayFromJson(tUsersListJson)
+   return JSONToArray(tUsersListJson)
 end usersGetList
 
 
@@ -1123,9 +1151,12 @@ function userGetByID pUserID, pContext
    put sWPAPI["post_url"] into tPostURL
    
    -- Create the URL used to call the REST service
-   get URL(tPostURL & tAPICall) into tUserJson
+   get URL(tPostURL & tAPICall)
+   put it into tUserJson
    
-   return tUserJson
+   put JSONToArray(tUserJson) into tArray
+   
+   return tArray
 end userGetByID
 
 
@@ -1150,7 +1181,7 @@ function commentCreate pCommentData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pCommentData) into tPostJson
+   put ArrayToJSON(pCommentData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "comments" into tAPICall
@@ -1162,6 +1193,8 @@ function commentCreate pCommentData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults 
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then   
       return 0
    end if
@@ -1192,8 +1225,9 @@ function commentsGetList pParameters
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pParameters["context"] after tFilters
+      else
+         put "&context=" & pParameters["context"] after tFilters
       end if
-      put "&context=" & pParameters["context"] after tFilters
    end if
    
    -- Current page of the collection. Default: 1
@@ -1237,10 +1271,18 @@ function commentsGetList pParameters
    -- Get post URL
    put sWPAPI["post_url"] into tPostURL
    
+   if tAPICall contains "?" then
+   else
+      put "?" into char 1 of tFilters
+   end if
+   
+   
    get URL(tPostURL & tAPICall & tFilters)
    put it into tJson
    
-   return tJson
+   put JSONToArray(tJson) into tArray
+   
+   return tArray
 end commentsGetList
 
 
@@ -1270,7 +1312,9 @@ function commentGetByID pCommentID
    get URL(tPostURL & tAPICall) 
    put it into tCommentJson
    
-   return tCommentJson
+   put JSONToArray(tCommentJson) into tArray
+   
+   return tArray
 end commentGetByID
 
 
@@ -1322,7 +1366,7 @@ end commentDelete
 --       25/04/2016 Narek: Created function
 -------------------------------------------------------------------------------------------------------------
 function commentEdit pCommentID, pCommentData
-   accessTokenChech
+   accessTokenCheck
    
    --Checking and Buidling Parameters
    if pCommentID is empty then
@@ -1337,7 +1381,7 @@ function commentEdit pCommentID, pCommentData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pCommentData) into tPostJson
+   put ArrayToJSON(pCommentData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "commetns/" into tAPICall
@@ -1349,6 +1393,8 @@ function commentEdit pCommentID, pCommentData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then 
       return 0
    end if
@@ -1373,10 +1419,10 @@ function pageDelete pPageID, pForce
    
    --Checking and Buidling Parameters
    if pPageID is empty then
-      return "Error: PageID is required" //pPostID is required
+      return "Error: PageID is required" //pPageID is required
    end if
    if pForce is true then
-      put  "?force=true" into tForce
+      put  "&force=true" into tForce
    end if
    
    -- Getting access token for authentification
@@ -1428,7 +1474,7 @@ function pageCreate pPageData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pPageData) into tPostJson
+   put ArrayToJSON(pPageData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "pages" into tAPICall
@@ -1440,6 +1486,8 @@ function pageCreate pPageData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults 
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then   
       return 0
    end if
@@ -1490,7 +1538,9 @@ function pageGetByID pPageID, pContext
    get URL(tPostURL & tAPICall) 
    
    put it into tJsonData
-   return tJsonData
+   
+   put JSONToArray(tJsonData) into tArray
+   return tArray
 end pageGetByID
 
 
@@ -1516,8 +1566,9 @@ function pagesGetList pParameters
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pParameters["context"] after tFilters
+      else
+         put "&context=" & pParameters["context"] after tFilters
       end if
-      put "&context=" & pParameters["context"] after tFilters
    end if
    
    -- Current page of the collection. Default: 1
@@ -1561,12 +1612,17 @@ function pagesGetList pParameters
    
    put sWPAPI["post_url"] into tPostURL
    
+   if tAPICall contains "?" then
+   else
+      put "?" into char 1 of tFilters
+   end if
+   
    -- Get all pages list
    get URL(tPostURL & tAPICall & tFilters)
    put it into tJsonData
    
    -- Converting pages data json to array for usability
-   put arrayFromJson(tJsonData) into tPagesList
+   put JSONToArray(tJsonData) into tPagesList
    
    return tPagesList
 end pagesGetList
@@ -1600,7 +1656,7 @@ function pageEdit pPageID, pPageData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pPageData) into tPostJson
+   put ArrayToJSON(pPageData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "pages/" into tAPICall
@@ -1612,6 +1668,8 @@ function pageEdit pPageID, pPageData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then 
       return 0
    end if
@@ -1654,7 +1712,7 @@ function pageEditWithLang pPageID, pPageData
    get URL(tPostURL & tAPICall) 
    put it into tEditingPageJson
    
-   put arrayFromJson(tEditingPageJson) into tEditingPageArray
+   put JSONToArray(tEditingPageJson) into tEditingPageArray
    
    -- Get languages of post title
    put tEditingPageArray["title"]["raw"] into tTitleLangList
@@ -1735,7 +1793,7 @@ function pageEditWithLang pPageID, pPageData
    end repeat
    
    -- Convert to json for posting
-   put jsonFromArray(tEditPageArray) into tPostJson 
+   put ArrayToJSON(tEditPageArray) into tPostJson 
    
    -- Build URL
    put "pages/" & pPageID into tAPICall
@@ -1770,6 +1828,8 @@ function menusGetList
    get URL(tPostURL & tAPICall)
    put it into tMenusList
    
+   put JSONToArray(tMenusList) into tMenusList
+   
    return tMenusList
 end menusGetList
 
@@ -1795,6 +1855,8 @@ function menuGetByID pMenuID
    -- Create the URL used to call the REST service
    get URL(tPostURL & tAPICall)
    put it into tMenuJson
+   
+   put JSONToArray(tMenusList) into tMenusList
    
    return tMenuJson
 end menuGetByID
@@ -1826,7 +1888,7 @@ function categoryCreate pCategoryData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pCategoryData) into tPostJson
+   put ArrayToJSON(pCategoryData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "categories" into tAPICall
@@ -1838,6 +1900,8 @@ function categoryCreate pCategoryData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults 
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then   
       return 0
    end if
@@ -1876,7 +1940,7 @@ function categoryEdit pCategoryID, pCategoryData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pCategoryData) into tPostJson
+   put ArrayToJSON(pCategoryData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "categories/" & pCategoryID into tAPICall
@@ -1888,6 +1952,8 @@ function categoryEdit pCategoryID, pCategoryData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults 
+   put JSONToArray(tResults) into tResults
+   
    if tResults is empty then   
       return 0
    end if
@@ -1966,7 +2032,9 @@ function categoryGetByID pCategoryID
    get URL(tPostURL & tAPICall) 
    put it into tCategory
    
-   return tCategory
+   put JSONToArray(tCategory) into tArray
+   
+   return tArray
 end categoryGetByID
 
 
@@ -1992,8 +2060,9 @@ function categoriesGetList pParameters
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pParameters["context"] after tFilters
+      else
+         put "&context=" & pParameters["context"] after tFilters
       end if
-      put "&context=" & pParameters["context"] after tFilters
    end if
    
    -- Current page of the collection. Default: 1
@@ -2037,10 +2106,17 @@ function categoriesGetList pParameters
    -- Get post URL
    put sWPAPI["post_url"] into tPostURL
    
+   if tAPICall contains "?" then
+   else
+      put "?" into char 1 of tFilters
+   end if
+   
    get URL(tPostURL & tAPICall & tFilters) 
    put it into tCategory
    
-   return tCategory
+   put JSONToArray(tCategory) into tArray
+   
+   return tArray
 end categoriesGetList
 
 
@@ -2070,7 +2146,7 @@ function tagCreate pTagData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pTagData) into tPostJson
+   put ArrayToJSON(pTagData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "tags" into tAPICall
@@ -2082,6 +2158,8 @@ function tagCreate pTagData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults 
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then   
       return 0
    end if
@@ -2116,7 +2194,7 @@ function tagEdit pTagID, pTagData
    put sAccessToken["access_token"] into tAccessToken
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pTagData) into tPostJson
+   put ArrayToJSON(pTagData) into tPostJson
    
    -- Create the URL used to call the REST service
    put "tags/" & pTagID into tAPICall
@@ -2128,6 +2206,8 @@ function tagEdit pTagID, pTagData
    post tPostJson to URL(tPostURL & tAPICall)
    
    put it into tResults 
+   
+   put JSONToArray(tResults) into tResults
    if tResults is empty then   
       return 0
    end if
@@ -2198,7 +2278,9 @@ function tagGetByID pTagID
    get URL(tPostURL & tAPICall)
    put it into tTagJson
    
-   return tTagJson
+   put JSONToArray(tTagJson) into tArray
+   
+   return tArray
 end tagGetByID
 
 
@@ -2221,7 +2303,7 @@ function tagsGetList
    get URL (tPostURL & tAPICall)
    put it into tTagsList
    
-   return arrayFromJson(tTagsList)
+   return JSONToArray(tTagsList)
 end tagsGetList
 
 
@@ -2276,7 +2358,7 @@ function mediaCreate pMediaPath, pMediaData
       post tBinary to URL (tPostURL & tAPICall)
       -- Get the added image Json
       put it into tResults
-      put arrayFromJson(tResults) into tMediaArray
+      put JSONToArray(tResults) into tMediaArray
       
       -- Setting the http headers
       put "Content-Type: application/json" & cr after tHeader
@@ -2289,12 +2371,14 @@ function mediaCreate pMediaPath, pMediaData
       put "/?access_token=" & tAccessToken after tAPICall
       
       -- Convert passed array to Json for posting
-      put jsonFromArray(pMediaData) into tPostJson
+      put ArrayToJSON(pMediaData) into tPostJson
       
       post tPostJson to URL(tPostURL & tAPICall)
       put it into tResult
       
-      return tResult
+      put JSONToArray(tResult) into tArray
+      
+      return tArray
    end if
 end mediaCreate
 
@@ -2328,14 +2412,16 @@ function mediaEdit pMediaID, pMediaData
    
    -- Create the URL used to call the REST service
    put "media/" & pMediaID into tAPICall
-   put "/?access_token=" & tAccessToken after tAPICall
+   put "/?access_token=" & sAccessToken["access_token"] after tAPICall
    
    -- Convert passed array to Json for posting
-   put jsonFromArray(pMediaData) into tPostJson
+   put ArrayToJSON(pMediaData) into tPostJson
    
-   post tPostJson to URL(tPostURL & tAPICall)
+   post tPostJson to URL(sWPAPI["post_url"] & tAPICall)
    
    put it into tResults 
+   put JSONToArray(tResults) into tResults
+   
    if tResults is empty then   
       return 0
    end if
@@ -2404,7 +2490,9 @@ function mediaGetByID pMediaID
    get URL(tPostURL & tAPICall)
    put it into tMediaJson
    
-   return tMediaJson
+   put JSONToArray(tMediaJson) into tArray
+   
+   return tArray
 end mediaGetByID
 
 
@@ -2430,8 +2518,9 @@ function mediaGetList
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pParameters["context"] after tFilters
+      else
+         put "&context=" & pParameters["context"] after tFilters
       end if
-      put "&context=" & pParameters["context"] after tFilters
    end if
    
    -- Current page of the collection. Default: 1
@@ -2475,10 +2564,17 @@ function mediaGetList
    -- Get post URL
    put sWPAPI["post_url"] into tPostURL
    
+   if tAPICall contains "?" then
+   else
+      put "?" into char 1 of tFilters
+   end if
+   
    get URL(tPostURL & tAPICall & tFilters)
    put it into tMediaJson
    
-   return tMediaJson
+   put JSONToArray(tMediaJson) into tArray
+   
+   return tArray
 end mediaGetList
 
 
@@ -2500,6 +2596,8 @@ function postTypesGetList pContext
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pContext after tAPICall
+      else
+         put "&context=" & pContext after tAPICall
       end if 
    end if
    
@@ -2512,7 +2610,9 @@ function postTypesGetList pContext
    get URL(tPostURL & tAPICall)
    put it into tJson
    
-   return tJson
+   put JSONToArray(tJson) into tArray
+   
+   return tArray
 end postTypesGetList
 
 
@@ -2535,6 +2635,8 @@ function postTypesGetByType pType, pContext
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pContext after tAPICall
+      else
+         put "&context=" & pContext after tAPICall
       end if 
    end if
    
@@ -2547,7 +2649,9 @@ function postTypesGetByType pType, pContext
    get URL(tPostURL & tAPICall)
    put it into tJson
    
-   return tJson
+   put JSONToArray(tJson) into tArray
+   
+   return tArray
 end postTypesGetByType
 
 
@@ -2570,6 +2674,8 @@ function postStatusesGetList pContext
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pContext after tAPICall
+      else
+         put "&context=" & pContext after tAPICall
       end if 
    end if
    
@@ -2582,7 +2688,9 @@ function postStatusesGetList pContext
    get URL(tPostURL & tAPICall)
    put it into tJson
    
-   return tJson
+   put JSONToArray(tJson) into tArray
+   
+   return tArray
 end postStatusesGetList
 
 
@@ -2606,6 +2714,8 @@ function postStatusesGetByStatus pStatus, pContext
          
          put "/?access_token=" & sAccessToken["access_token"] into tAPICall
          put "&context=" & pContext after tAPICall
+      else
+         put "&context=" & pContext after tAPICall
       end if 
    end if
    
@@ -2618,5 +2728,27 @@ function postStatusesGetByStatus pStatus, pContext
    get URL(tPostURL & tAPICall)
    put it into tJson
    
-   return tJson
+   put JSONToArray(tJson) into tArray
+   
+   return tArray
+
 end postStatusesGetByStatus
+
+
+
+function ArrayToJSON pArray,pForceRootType,pPretty
+    repeat for each key tKey in pArray
+        if pArray[tKey] is an array then
+            put "}"&ArrayToJSON(pArray[tKey]) into pArray[tKey]
+        end if
+    end repeat
+    return(mergJSONEncode("pArray",pForceRootType,pPretty))
+end ArrayToJSON
+
+function JSONToArray pJSON
+   local tArray,tKeys
+   repeat for each line tKey in mergJSONDecode(pJSON,"tArray")
+      put JSONToArray(tArray[tKey]) into tArray[tKey]
+   end repeat
+   return tArray
+end JSONToArray
